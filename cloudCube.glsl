@@ -152,10 +152,20 @@ float noise(vec3 uv) {
 
 float density(vec3 pos)
 {
-    float n1 = (noise((pos + u_time * 0.03) * 2.0));
+    float n1 = (noise((pos + u_time * 0.03) * 1.0));
     float n2 = (noise((pos + u_time * 0.04) * 5.0));
     float n3 = (noise((pos + u_time * 0.05) * 15.0));
-    return n1*n1*n1*n1*n1*n1*50.0*n2*n2*n2*10.0*n3+n3*n3+n2+n1*n1*n1*10.0;
+
+    float n4 = n1*n1*n1*n1*n1*n1*5.0;
+    return (
+    n4
+    +n2*n4
+    // n1
+    // n1 * n1 * n1 * n1 * n1 * n1* 50.0
+    // +n3*n3
+    // +n2
+    // +n1*n1*n1*10.0
+    );
 }
 
 void main(){
@@ -173,11 +183,11 @@ void main(){
     rayDir.xz *= rot2D(mx.x);
 
     if (gl_FragCoord.x < 150.0 && gl_FragCoord.y < 150.0){
-        gl_FragColor = vec4(vec3(noise(vec3(uv * 50.0, 0.0))), 1.0);
+        gl_FragColor = vec4(vec3(noise(vec3(uv * 15.0, 0.0))), 1.0);
         return;
     }
     if (gl_FragCoord.x < 300.0 && gl_FragCoord.y < 150.0){
-        gl_FragColor = vec4(vec3(density(vec3(uv * 50.0, 0.0)) / 10.0), 1.0);
+        gl_FragColor = vec4(vec3(density(vec3(uv * 15.0, 0.0))), 1.0);
         return;
     }
 
@@ -206,6 +216,6 @@ void main(){
         t += stepSize;
     }
 
-    float beer = exp(-distance * .003);
+    float beer = exp(-distance * .04);
     gl_FragColor = mix(bgColor, spColor, 1.0 - beer);
 }
