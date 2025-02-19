@@ -2,13 +2,9 @@
     precision mediump float;
 #endif
 
-uniform vec2 u_resolution;
+uniform float u_mouseButton; 
 
 void main() {
-    // vec2 uv = gl_FragCoord.xy / u_resolution.xy; // [0, 1]
-    vec2 uv = gl_FragCoord.xy / u_resolution.xy; // [0, 1]
-    // uv.x *= u_resolution.x / u_resolution.y;
-    uv = uv * 10.0;
-    float dist = distance(fract(uv), vec2(0.5));
-    gl_FragColor = vec4(vec3(dist), 1.0);
+    float pressed = step(0.5, u_mouseButton); // returns 0.0 if u_mouseButton < 0.5, else 1.0
+    gl_FragColor = vec4(vec3(pressed), 1.0);
 }
