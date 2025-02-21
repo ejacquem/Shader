@@ -96,7 +96,10 @@ float noise(vec3 uv) {
 
 float density(vec3 pos)
 {
-    return noise(pos);
+    float n1 = noise(pos * 3.0 + u_time * 0.2) * 2.0;
+    n1 = smoothstep(0.0, 1.0, n1);
+    float n2 = noise(pos * 10.0 + u_time * 0.2)* 2.0 + 1.0;
+    return n1 * n2 * n2;
 }
 
 // https://gist.github.com/DomNomNom/46bb1ce47f68d255fd5d
@@ -112,27 +115,53 @@ vec2 intersectAABB(vec3 rayOrigin, vec3 rayDir, vec3 boxMin, vec3 boxMax) {
     return vec2(tNear, tFar);
 }
 
+float lightRay(vec3 rayOrigin, vec3 rayDir)
+{
+    vec2 nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
+    if(nearFar.x >= nearFar.y) return 0.;
+    vec3 pos = vec3(0);
+    float dist = 0.0;
+    float stepSize = nearFar.y / 7.0;
+
+    for (int i = 1; i <= 7; i++)
+    {
+        pos = rayOrigin + rayDir * stepSize * float(i);
+        float den = density(pos);
+        if (den > 0.1){
+            dist += stepSize * den;
+        }
+    }
+    float beer = exp(-dist * 1.0) * 0.9;
+    return beer;
+}
+
 vec4 raymarch(vec3 rayOrigin, vec3 rayDir)
 {
     vec2 nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
-    if(nearFar.x >= nearFar.y) return vec4(0);
+    if(nearFar.x >= nearFar.y) return bgColor;
     vec3 pos = vec3(0);
-    float den = 0.0;
+    float dist = 0.0;
     float stepSize = 0.01;
-    float sampleNb = 0.0;
     float t = nearFar.x; // tot dist from ray origin (starts at near intersection)
 
-    for (int i = 0; i < 300; i++)
+    float lightIntensity = 0.0;
+
+    for (int i = 0; i < 10000; i++)
     {
-        pos += rayOrigin + rayDir * t;
-        den += density(pos);
+        pos = rayOrigin + rayDir * t;
+        float den = density(pos);
+        if (den > 0.1){
+            dist += stepSize * den;
+            lightIntensity += dist * stepSize * den * lightRay(pos, lightDir);
+        }
+
+        t += stepSize;
         if(t > nearFar.y)
             break;
-        sampleNb++;
-        // t += stepSize;
     }
-    den /= sampleNb * 0.1;
-    return vec4(vec3(den), 1.0);
+    float beer = exp(-dist * 10.0);
+    // beer = 1.0 - densityThreshold(beer, 0.9);
+    return bgColor * beer + lightIntensity;
 }
 
 void main(){
@@ -154,7 +183,7 @@ void main(){
         return;
     }
     if (gl_FragCoord.x < 300.0 && gl_FragCoord.y < 150.0){
-        gl_FragColor = vec4(vec3(density(vec3(uv * 15.0, 0.0))), 1.0);
+        gl_FragColor = vec4(vec3(density(vec3(uv * 2.0, 0.0))), 1.0);
         return;
     }
 
