@@ -49,23 +49,6 @@ float hash( in float n )
     return fract(sin(n)*43758.5453);
 }
 
-float sdfSphere(vec3 pos, vec3 center, float s)
-{
-  return length(pos - center) - s;
-}
-
-float sdfBox(vec3 pos, vec3 box)
-{
-  vec3 q = abs(pos) - box;
-  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
-}
-
-float opSmoothUnion( float d1, float d2, float k )
-{
-    float h = clamp( 0.5 + 0.5*(d2-d1)/k, 0.0, 1.0 );
-    return mix( d2, d1, h ) - k*h*(1.0-h);
-}
-
 mat2 rot2D(float angle)
 {
     float c = cos(angle);
@@ -113,7 +96,7 @@ float noise(vec3 uv) {
 
 float density(vec3 pos)
 {
-    return noise(pos) * 0.5 + 0.5;
+    return noise(pos);
 }
 
 // https://gist.github.com/DomNomNom/46bb1ce47f68d255fd5d
@@ -139,16 +122,16 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDir)
     float sampleNb = 0.0;
     float t = nearFar.x; // tot dist from ray origin (starts at near intersection)
 
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < 300; i++)
     {
         pos += rayOrigin + rayDir * t;
         den += density(pos);
         if(t > nearFar.y)
             break;
         sampleNb++;
+        // t += stepSize;
     }
-    den /= sampleNb * 0.6;
-    den *= den;
+    den /= sampleNb * 0.1;
     return vec4(vec3(den), 1.0);
 }
 
