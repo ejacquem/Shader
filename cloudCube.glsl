@@ -88,24 +88,6 @@ float calculateDiffuse(vec3 pos)
     return clamp((sdfMap(pos+eps*lightDir)-sdfMap(pos))/eps,0.0,1.0);
 }
 
-vec4 raymarch(vec3 rayOrigin, vec3 rayDir)
-{
-    float m_dist = maxDist;
-    float t = 0.0; // total dist
-    vec3 pos;
-
-    for (int i = 0; i < steps; i++){
-        pos = rayOrigin + rayDir * t;
-        m_dist = sdfMap(pos);
-
-        if (m_dist > maxDist || m_dist < epsilon) 
-            break;
-
-        t += m_dist;
-    }
-    return vec4(pos, m_dist);
-}
-
 bool insideCloud(vec3 pos)
 {
     float l = 0.5; //len
@@ -122,14 +104,6 @@ vec3 random3(vec3 st) {
   return fract(sin(st) * 14.7) * 2.0 - 1.0;
 }
 
-float bilinearGray(vec2 pos, float v1, float v2, float v3, float v4) {
-  vec2 uv = smoothstep(0.0, 1.0, pos);
-  float R0 = mix(v1, v2, uv.x);
-  float R1 = mix(v3, v4, uv.x);
-  float color = mix(R0, R1, uv.y);
-  return color;
-}
-
 // return 0 to 1 value
 float noise(vec3 uv) {
   vec3 i = floor(uv); // cellPos
@@ -144,8 +118,10 @@ float noise(vec3 uv) {
   float c7 = dot(random3(i + vec3(0,1,1)), vec3(pos - vec3(0,1,1)));
   float c8 = dot(random3(i + vec3(1,1,1)), vec3(pos - vec3(1,1,1)));
   
-  float cellVal1 = bilinearGray(pos.xy, c1, c2, c3, c4);
-  float cellVal2 = bilinearGray(pos.xy, c5, c6, c7, c8);
+  vec3 suv = smoothstep(0.0, 1.0, pos);
+
+  float cellVal1 = mix(mix(c1, c2, suv.x), mix(c3, c4, suv.x), suv.y);
+  float cellVal2 = mix(mix(c5, c6, suv.x), mix(c7, c8, suv.x), suv.y);
   float cellVal = mix(cellVal1, cellVal2, pos.z);
   return cellVal * 0.5 + 0.5;
 }
@@ -156,16 +132,45 @@ float density(vec3 pos)
     float n2 = (noise((pos + u_time * 0.04) * 5.0));
     float n3 = (noise((pos + u_time * 0.05) * 15.0));
 
-    float n4 = n1*n1*n1*n1*n1*n1*5.0;
+    // float n4 = n1*n1*n1*n1*n1*n1*5.0;
     return (
-    n4
-    +n2*n4
+    // n4
+    // +n2*n4
     // n1
-    // n1 * n1 * n1 * n1 * n1 * n1* 50.0
-    // +n3*n3
-    // +n2
-    // +n1*n1*n1*10.0
-    );
+    n1 * n1 * n1 * n1 * n1 * n1* 50.0
+    +n3*n3
+    +n2
+    +n1*n1*n1*10.0
+    ) * 0.1;
+}
+
+vec4 raymarch(vec3 rayOrigin, vec3 rayDir)
+{
+    float stepSize = 0.05;
+    float t = 0.0;
+    float distance = 0.0;
+    float light_received = 0.0;
+
+    for(int i = 0; i < 1000; i++){
+        vec3 pos = rayOrigin + rayDir * t;
+        if(insideCloud(pos)){
+            vec3 plDir = normalize(pointLight - pos); // dir to pointlight
+            // float t2 = 0.0;
+            // for(int j = 0; j < 5; j++){
+            //     vec3 pos2 = pos + plDir * t2;
+            //     if(insideCloud(pos)){
+            //         light_received += density(pos);
+            //     }
+            //     t2 += stepSize * 5.0;
+            // }
+            distance += density(pos);
+        }
+        t += stepSize;
+    }
+
+    float beer = exp(-distance * .04);
+    vec3 color = mix(vec3(0), spColor.rgb, light_received);
+    return vec4(color, 1.0 - beer);
 }
 
 void main(){
@@ -194,28 +199,6 @@ void main(){
     //test noise
     // gl_FragColor = vec4(vec3(noise(vec3(uv * 2.0, 0))), 1.0);
     // return;
-
-    float stepSize = 0.01;
-    float t = 0.0;
-    float distance = 0.0;
-
-    for(int i = 0; i < 1000; i++){
-        vec3 pos = rayOrigin + rayDir * t;
-        if(insideCloud(pos)){
-            vec3 plDir = normalize(pointLight - pos); // dir to pointlight
-            float t2 = 0.0;
-            for(int i = 0; i < 200; i++){
-                vec3 pos2 = pos + plDir * t2;
-                if(insideCloud(pos)){
-                    
-                }
-                t2 += stepSize * 5.0;
-            }
-            distance += density(pos);
-        }
-        t += stepSize;
-    }
-
-    float beer = exp(-distance * .04);
-    gl_FragColor = mix(bgColor, spColor, 1.0 - beer);
+    vec4 color = raymarch(rayOrigin, rayDir);
+    gl_FragColor = color;
 }
