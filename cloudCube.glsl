@@ -17,6 +17,7 @@ const vec3 lightColor = vec3(1.0,0.9,0.8);
 const vec3 ambientColor = vec3(0.19, 0.28, 0.37);
 const vec3 pointLight = vec3(0,0,-2);
 const float pointLightI = 3.0; // intensity
+const float cloudSize = 0.5;
 
 // https://www.shadertoy.com/view/4djSRW
 vec3 hash33(vec3 p3)
@@ -72,30 +73,6 @@ mat2 rot2D(float angle)
     return mat2(c, s, -s, c);
 }
 
-float sdfMap(vec3 pos)
-{
-    vec3 boxSize = vec3(5.0);
-    
-    float box = sdfBox(pos, boxSize);
-    
-    return box;
-}
-
-vec3 calculateNormal(vec3 pos)
-{
-    vec2 e = vec2(1.0,-1.0)*0.5773*0.001;
-    return normalize( e.xyy*sdfMap( pos + e.xyy ) + 
-					  e.yyx*sdfMap( pos + e.yyx ) + 
-					  e.yxy*sdfMap( pos + e.yxy ) + 
-					  e.xxx*sdfMap( pos + e.xxx ) );
-}
-
-float calculateDiffuse(vec3 pos)
-{
-    float eps = 0.0001;
-    return clamp((sdfMap(pos+eps*lightDir)-sdfMap(pos))/eps,0.0,1.0);
-}
-
 bool insideCloud(vec3 pos)
 {
     float l = 0.5; //len
@@ -131,58 +108,48 @@ float noise(vec3 uv) {
   float cellVal1 = mix(mix(c1, c2, suv.x), mix(c3, c4, suv.x), suv.y);
   float cellVal2 = mix(mix(c5, c6, suv.x), mix(c7, c8, suv.x), suv.y);
   float cellVal = mix(cellVal1, cellVal2, pos.z);
-  return cellVal * 0.5 + 0.5;
+  return cellVal;
 }
 
 float density(vec3 pos)
 {
-    float n1 = (noise((pos + u_time * 0.03) * 2.0));
-    // float n2 = (noise((pos + u_time * 0.04) * 5.0));
-    float n2 = 0.5;
-    // float n3 = (noise((pos + u_time * 0.05) * 15.0));
-    float n3 = 0.5;
+    return noise(pos) * 0.5 + 0.5;
+}
 
-    return (n1*n1*n1*n1*n1*n1*50.0*n2*n2*n2*10.0*n3+n3*n3+n2+n1*n1*n1*10.0)* 0.1;
+// https://gist.github.com/DomNomNom/46bb1ce47f68d255fd5d
+// Compute the near and far intersections using the slab method.
+// No intersection if tNear > tFar.
+vec2 intersectAABB(vec3 rayOrigin, vec3 rayDir, vec3 boxMin, vec3 boxMax) {
+    vec3 tMin = (boxMin - rayOrigin) / rayDir;
+    vec3 tMax = (boxMax - rayOrigin) / rayDir;
+    vec3 t1 = min(tMin, tMax);
+    vec3 t2 = max(tMin, tMax);
+    float tNear = max(max(t1.x, t1.y), t1.z);
+    float tFar = min(min(t2.x, t2.y), t2.z);
+    return vec2(tNear, tFar);
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDir)
 {
-    float stepSize = 0.03;
-    float t = 0.0;
-    float light_received = 0.0;
-    float totalDen = 0.0;
-    float samlpeNb = 0.0;
-    vec3 first = vec3(0);
-    vec3 last = vec3(0);
+    vec2 nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
+    if(nearFar.x >= nearFar.y) return vec4(0);
+    vec3 pos = vec3(0);
+    float den = 0.0;
+    float stepSize = 0.01;
+    float sampleNb = 0.0;
+    float t = nearFar.x; // tot dist from ray origin (starts at near intersection)
 
-    for(int i = 0; i < 100; i++){
-        vec3 pos = rayOrigin + rayDir * t;
-        float den = 1.0;
-        if(insideCloud(pos)){
-            if (first == vec3(0))
-                first = pos;
-            vec3 plDir = normalize(pointLight - pos); // dir to pointlight
-            float t2 = 0.0;
-            // for(int j = 0; j < 5; j++){
-            //     vec3 pos2 = pos + plDir * t2;
-            //     if(insideCloud(pos)){
-            //         light_received += density(pos);
-            //     }
-            //     t2 += stepSize * 10.0;
-            // }
-            den = density(pos);
-            totalDen += den;
-            samlpeNb++;
-        }
-        else if (first != vec3(0) && last == vec3(0))
-            last = pos;
-        t += stepSize * (1.5 - (den * 0.5));
+    for (int i = 0; i < 100; i++)
+    {
+        pos += rayOrigin + rayDir * t;
+        den += density(pos);
+        if(t > nearFar.y)
+            break;
+        sampleNb++;
     }
-    totalDen /= distance(first, last) * 1.0;
-
-    float beer = exp(-totalDen * .035);
-    vec3 color = mix(vec3(0), spColor.rgb, light_received * 0.1);
-    return vec4(color, (1.0 - beer) * (1.0 - beer));
+    den /= sampleNb * 0.6;
+    den *= den;
+    return vec4(vec3(den), 1.0);
 }
 
 void main(){
