@@ -35,6 +35,14 @@ float hash13(vec3 p3)
     return fract((p3.x + p3.y) * p3.z);
 }
 
+float hash11(float p)
+{
+    p = fract(p * .1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return fract(p);
+}
+
 float hash( in float n )
 {
     return fract(sin(n)*43758.5453);
@@ -128,49 +136,53 @@ float noise(vec3 uv) {
 
 float density(vec3 pos)
 {
-    float n1 = (noise((pos + u_time * 0.03) * 1.0));
-    float n2 = (noise((pos + u_time * 0.04) * 5.0));
-    float n3 = (noise((pos + u_time * 0.05) * 15.0));
+    float n1 = (noise((pos + u_time * 0.03) * 2.0));
+    // float n2 = (noise((pos + u_time * 0.04) * 5.0));
+    float n2 = 0.5;
+    // float n3 = (noise((pos + u_time * 0.05) * 15.0));
+    float n3 = 0.5;
 
-    // float n4 = n1*n1*n1*n1*n1*n1*5.0;
-    return (
-    // n4
-    // +n2*n4
-    // n1
-    n1 * n1 * n1 * n1 * n1 * n1* 50.0
-    +n3*n3
-    +n2
-    +n1*n1*n1*10.0
-    ) * 0.1;
+    return (n1*n1*n1*n1*n1*n1*50.0*n2*n2*n2*10.0*n3+n3*n3+n2+n1*n1*n1*10.0)* 0.1;
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDir)
 {
-    float stepSize = 0.05;
+    float stepSize = 0.03;
     float t = 0.0;
-    float distance = 0.0;
     float light_received = 0.0;
+    float totalDen = 0.0;
+    float samlpeNb = 0.0;
+    vec3 first = vec3(0);
+    vec3 last = vec3(0);
 
-    for(int i = 0; i < 1000; i++){
+    for(int i = 0; i < 100; i++){
         vec3 pos = rayOrigin + rayDir * t;
+        float den = 1.0;
         if(insideCloud(pos)){
+            if (first == vec3(0))
+                first = pos;
             vec3 plDir = normalize(pointLight - pos); // dir to pointlight
-            // float t2 = 0.0;
+            float t2 = 0.0;
             // for(int j = 0; j < 5; j++){
             //     vec3 pos2 = pos + plDir * t2;
             //     if(insideCloud(pos)){
             //         light_received += density(pos);
             //     }
-            //     t2 += stepSize * 5.0;
+            //     t2 += stepSize * 10.0;
             // }
-            distance += density(pos);
+            den = density(pos);
+            totalDen += den;
+            samlpeNb++;
         }
-        t += stepSize;
+        else if (first != vec3(0) && last == vec3(0))
+            last = pos;
+        t += stepSize * (1.5 - (den * 0.5));
     }
+    totalDen /= distance(first, last) * 1.0;
 
-    float beer = exp(-distance * .04);
-    vec3 color = mix(vec3(0), spColor.rgb, light_received);
-    return vec4(color, 1.0 - beer);
+    float beer = exp(-totalDen * .035);
+    vec3 color = mix(vec3(0), spColor.rgb, light_received * 0.1);
+    return vec4(color, (1.0 - beer) * (1.0 - beer));
 }
 
 void main(){
