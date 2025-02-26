@@ -96,10 +96,20 @@ float noise(vec3 uv) {
 
 float density(vec3 pos)
 {
-    float n1 = noise(pos * 3.0 + u_time * 0.2) * 2.0;
-    n1 = smoothstep(0.0, 1.0, n1);
-    float n2 = noise(pos * 10.0 + u_time * 0.2)* 2.0 + 1.0;
-    return n1 * n2 * n2;
+    float time = 0.0;
+    float cloudNoise = 0.0;
+    float cloudShape = noise(pos * 3.0 + time * 0.2) * 2.0;
+    cloudShape = smoothstep(0.0, 1.0, cloudShape);
+    cloudNoise += cloudShape;
+    // float n2 = noise(pos * 15.0 + time * 0.2);
+    // return n1 - n2 * n1 * 1.0;
+    if (cloudShape > 0.0)
+    {
+        float cloudDetail = noise(pos * 15.0 + time * 0.2) * 2.0;
+
+        cloudNoise -= cloudDetail * cloudShape;
+    }
+    return max(cloudNoise, 0.05);
 }
 
 // https://gist.github.com/DomNomNom/46bb1ce47f68d255fd5d
@@ -115,6 +125,8 @@ vec2 intersectAABB(vec3 rayOrigin, vec3 rayDir, vec3 boxMin, vec3 boxMax) {
     return vec2(tNear, tFar);
 }
 
+float sigmaExt = 10.0;
+
 float lightRay(vec3 rayOrigin, vec3 rayDir)
 {
     vec2 nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
@@ -122,17 +134,19 @@ float lightRay(vec3 rayOrigin, vec3 rayDir)
     vec3 pos = vec3(0);
     float dist = 0.0;
     float stepSize = nearFar.y / 7.0;
+    float transmittence = 1.0;
 
     for (int i = 1; i <= 7; i++)
     {
         pos = rayOrigin + rayDir * stepSize * float(i);
         float den = density(pos);
-        if (den > 0.1){
-            dist += stepSize * den;
-        }
+        transmittence *= exp(-stepSize * (den * sigmaExt));
     }
-    float beer = exp(-dist * 1.0) * 0.9;
-    return beer;
+    return transmittence * 10.0;
+}
+
+float HenyeyGreenstein(float g, float costh){
+	return (1.0 / (4.0 * 3.1415))  * ((1.0 - g * g) / pow(1.0 + g*g - 2.0*g*costh, 1.5));
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDir)
@@ -142,26 +156,28 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDir)
     vec3 pos = vec3(0);
     float dist = 0.0;
     float stepSize = 0.01;
-    float t = nearFar.x; // tot dist from ray origin (starts at near intersection)
+    float t = nearFar.x + stepSize * hash11(nearFar.x * nearFar.y); // tot dist from ray origin (starts at near intersection)
 
     float lightIntensity = 0.0;
+    float transmittence = 1.0;
 
-    for (int i = 0; i < 10000; i++)
+    for (int i = 0; i < 1000; i++)
     {
         pos = rayOrigin + rayDir * t;
         float den = density(pos);
-        if (den > 0.1){
+        if (den > 0.01){
             dist += stepSize * den;
-            lightIntensity += dist * stepSize * den * lightRay(pos, lightDir);
+            // lightIntensity += dist * stepSize * den * lightRay(pos, -lightDir);
+            float scattering = HenyeyGreenstein(0.5, dot(rayDir, lightDir));
+            lightIntensity += stepSize * transmittence * scattering * lightRay(pos, -lightDir);
+            transmittence *= exp(-stepSize * (den * sigmaExt));
         }
 
         t += stepSize;
         if(t > nearFar.y)
             break;
     }
-    float beer = exp(-dist * 10.0);
-    // beer = 1.0 - densityThreshold(beer, 0.9);
-    return bgColor * beer + lightIntensity;
+    return bgColor * transmittence + lightIntensity;
 }
 
 void main(){
@@ -172,6 +188,7 @@ void main(){
     vec3 rayDir = normalize(vec3(uv, 1.0));
 
     // mx = vec2(u_time,-0.5);
+    mx *= 4.0;
     rayOrigin.yz *= rot2D(mx.y);
     rayDir.yz *= rot2D(mx.y);
 

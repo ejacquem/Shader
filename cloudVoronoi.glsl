@@ -45,7 +45,7 @@ float voronoi(vec2 pos)
     for (int j = -1; j <= 1; j++){
         vec2 ij = vec2(i,j);
         float dist = distance(f - ij, hash22(g + ij));
-        m_dist = min(m_dist, dist);
+        // m_dist = min(m_dist, dist);
         m_dist = smin(m_dist, dist, 0.05);
     }
     return m_dist;
@@ -69,6 +69,17 @@ float fbm(vec2 st) {
   return _sin;
 }
 
+float voronoise(vec2 uv)
+{
+    float n = 1.0 - voronoi(uv*4.);
+    float n2 = 1.0 - voronoi((uv)*4.);
+
+    float shape = (n - 0.5) * 2.0 * step(0.5, n) * (n2 - 0.5) * 2.0 * step(0.5, n2);
+    float detail = (1.0 - voronoi(uv*10.)) + (1.0 - voronoi(uv*25.)) * 2.0;
+
+    return (shape + detail * shape) ;
+}
+
 void main() {
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
     uv = uv * 0.5 + 0.5;
@@ -78,10 +89,12 @@ void main() {
     // vec3 color = vec3(1.0 - (n2 * n1 * n1));
     // vec3 color = vec3(fbm(uv * u_size * 10.0));
 
-    float color = 
-    voronoi(uv*4.) * .625 + 
-    voronoi(uv*10.) * .25 + 
-    voronoi(uv*15.) * .125;
+    // float color = 
+    // voronoi(uv*4.) * .625 + 
+    // voronoi(uv*10.) * .25 + 
+    // voronoi(uv*15.) * .125;
 
-    gl_FragColor = vec4(vec3(1.0 - color), 1.0);
+    float color = voronoise(uv);
+
+    gl_FragColor = vec4(vec3(color), 1.0);
 }

@@ -78,7 +78,7 @@ float fbm(vec3 st) {
   float amplitude = 1.0;
   float frequency = 1.0;
    
-  const int octaves = 6;
+  const int octaves = 5;
   float lacunarity = 2.0;
   float gain = 0.5;
 
@@ -90,12 +90,19 @@ float fbm(vec3 st) {
   }
   return _sin;
 }
+// (float value, float old_low, float old_high, float new_low, float new_high)
+float remap(float v, float ol, float oh, float nl, float nh){
+  float ret_val = nl + ( v - ol ) * ( nh - nl ) / ( oh - ol );
+  return ret_val ;
+}
 
 void main() {
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
     uv = uv * 0.5 + 0.5;
 
-    float color = fbm(vec3(uv, u_time * 0.1)) * 0.5 + 0.5;
+    float color = fbm(vec3(uv, u_time * 0.01)) * 0.5 + 0.5;
+    // color = remap(color, 0., 1., 0.0, 0.5);
+    color *= color * color * color * color * 10.0;
 
     gl_FragColor = vec4(vec3(color), 1.0);
 }
