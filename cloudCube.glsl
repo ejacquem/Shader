@@ -2,6 +2,8 @@
     precision mediump float;
 #endif
 
+#include "hash.glsl"
+
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
@@ -12,55 +14,24 @@ const float epsilon = 0.01;
 const vec4 bgColor = vec4(0.15, 0.69, 0.86, 1.0);
 const vec4 spColor = vec4(1.0);
 const int steps = 200;
-const vec3 lightDir = normalize(vec3(1.2, 1, -1.1));
+const vec3 lightDir = normalize(vec3(0.0, -1, 0.0));
 const vec3 lightColor = vec3(1.0,0.9,0.8);
 const vec3 ambientColor = vec3(0.19, 0.28, 0.37);
 const vec3 pointLight = vec3(0,0,-2);
 const float pointLightI = 3.0; // intensity
 const float cloudSize = 0.5;
 
-// https://www.shadertoy.com/view/4djSRW
-vec3 hash33(vec3 p3)
-{
-	p3 = fract(p3 * vec3(.1031, .1030, .0973));
-    p3 += dot(p3, p3.yxz+33.33);
-    return fract((p3.xxy + p3.yxx)*p3.zyx);
 
-}
+const vec3 RAYLEIGH = vec3(0.12, 0.25, 0.5);
 
-// https://www.shadertoy.com/view/4djSRW
-float hash13(vec3 p3)
-{
-	p3  = fract(p3 * .1031);
-    p3 += dot(p3, p3.zyx + 31.32);
-    return fract((p3.x + p3.y) * p3.z);
-}
-
-float hash11(float p)
-{
-    p = fract(p * .1031);
-    p *= p + 33.33;
-    p *= p + p;
-    return fract(p);
-}
-
-float hash( in float n )
-{
-    return fract(sin(n)*43758.5453);
-}
+const vec3 sigmaScattering = 100.0 * RAYLEIGH;
+const vec3 sigmaExtinction = 200.0 * RAYLEIGH;
 
 mat2 rot2D(float angle)
 {
     float c = cos(angle);
     float s = sin(angle);
     return mat2(c, s, -s, c);
-}
-
-bool insideCloud(vec3 pos)
-{
-    float l = 0.5; //len
-    return pos.x < l && pos.y < l && pos.z < l &&
-           pos.x > -l && pos.y > -l && pos.z > -l;
 }
 
 vec3 random3(vec3 st) {
@@ -70,6 +41,11 @@ vec3 random3(vec3 st) {
   
   st = vec3(d1, d2, d3);
   return fract(sin(st) * 14.7) * 2.0 - 1.0;
+}
+
+// https://www.shadertoy.com/view/3s3GDn
+float getGlow(float dist, float radius, float intensity){
+	return max(0.0, pow(radius/max(dist, 1e-5), intensity));	
 }
 
 // return 0 to 1 value
@@ -94,7 +70,7 @@ float noise(vec3 uv) {
   return cellVal;
 }
 
-float density(vec3 pos)
+float sampleDensity(vec3 pos)
 {
     float time = 0.0;
     float cloudNoise = 0.0;
@@ -109,7 +85,7 @@ float density(vec3 pos)
 
         cloudNoise -= cloudDetail * cloudShape;
     }
-    return max(cloudNoise, 0.05);
+    return max(cloudNoise, 0.005);
 }
 
 // https://gist.github.com/DomNomNom/46bb1ce47f68d255fd5d
@@ -125,22 +101,20 @@ vec2 intersectAABB(vec3 rayOrigin, vec3 rayDir, vec3 boxMin, vec3 boxMax) {
     return vec2(tNear, tFar);
 }
 
-float sigmaExt = 10.0;
-
-float lightRay(vec3 rayOrigin, vec3 rayDir)
+vec3 lightRay(vec3 rayOrigin, vec3 rayDir)
 {
     vec2 nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
-    if(nearFar.x >= nearFar.y) return 0.;
+    if(nearFar.x >= nearFar.y) return vec3(0.);
     vec3 pos = vec3(0);
     float dist = 0.0;
     float stepSize = nearFar.y / 7.0;
-    float transmittence = 1.0;
+    vec3 transmittence = vec3(1.0);
 
     for (int i = 1; i <= 7; i++)
     {
         pos = rayOrigin + rayDir * stepSize * float(i);
-        float den = density(pos);
-        transmittence *= exp(-stepSize * (den * sigmaExt));
+        float den = sampleDensity(pos);
+        transmittence *= exp(-stepSize * (den * sigmaExtinction));
     }
     return transmittence * 10.0;
 }
@@ -149,35 +123,52 @@ float HenyeyGreenstein(float g, float costh){
 	return (1.0 / (4.0 * 3.1415))  * ((1.0 - g * g) / pow(1.0 + g*g - 2.0*g*costh, 1.5));
 }
 
-vec4 raymarch(vec3 rayOrigin, vec3 rayDir)
+/*
+sampleSigmaS = sigmaScattering∗density
+sampleSigmaE = sigmaExtinction∗density
+ambient = gradient∗precipitation∗globalAmbientColor
+S = (evaluateLight(directionToSun,position)∗phase+ambient)∗sampleSigmaS
+Tr = exp(−sampleSigmaE ∗ stepSize)
+/∗ Analytical integration of light / transmittance between the steps ∗/
+Sint = (S − S ∗ Tr) / sampleSigmaE
+scatteredLight += transmittance ∗ Sint
+transmittance ∗= Tr
+*/
+void raymarch(vec3 rayOrigin, vec3 rayDir, out vec3 transmittance, out vec3 scatteredLight)
 {
-    vec2 nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
-    if(nearFar.x >= nearFar.y) return bgColor;
-    vec3 pos = vec3(0);
-    float dist = 0.0;
-    float stepSize = 0.01;
-    float t = nearFar.x + stepSize * hash11(nearFar.x * nearFar.y); // tot dist from ray origin (starts at near intersection)
+    scatteredLight = vec3(0.0);
+    transmittance = vec3(1.0);
 
-    float lightIntensity = 0.0;
-    float transmittence = 1.0;
+    vec2 nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
+    if(nearFar.x >= nearFar.y) return;
+    vec3 pos = vec3(0);
+    float stepSize = 0.01;
+    float t = nearFar.x + stepSize * hash11(nearFar.y / nearFar.x *0.1); // tot dist from ray origin (starts at near intersection)
+
+
+    float ambient = 0.0;
+    float phase = HenyeyGreenstein(0.3, dot(rayDir, lightDir));
 
     for (int i = 0; i < 1000; i++)
     {
         pos = rayOrigin + rayDir * t;
-        float den = density(pos);
-        if (den > 0.01){
-            dist += stepSize * den;
-            // lightIntensity += dist * stepSize * den * lightRay(pos, -lightDir);
-            float scattering = HenyeyGreenstein(0.5, dot(rayDir, lightDir));
-            lightIntensity += stepSize * transmittence * scattering * lightRay(pos, -lightDir);
-            transmittence *= exp(-stepSize * (den * sigmaExt));
-        }
+        float density = sampleDensity(pos);
+
+        vec3 SigmaS = sigmaScattering * density;
+        vec3 SigmaE = sigmaExtinction * density;
+
+        vec3 S = (lightRay(pos,-lightDir) * phase + ambient) * SigmaS;
+        vec3 Tr = exp(-SigmaE * stepSize);
+        vec3 Sint = (S - S * Tr) / SigmaE;
+        scatteredLight += transmittance * Sint;
+        transmittance *= Tr;
 
         t += stepSize;
         if(t > nearFar.y)
             break;
     }
-    return bgColor * transmittence + lightIntensity;
+    // return bgColor * transmittance + scatteredLight;
+    return;
 }
 
 void main(){
@@ -200,13 +191,23 @@ void main(){
         return;
     }
     if (gl_FragCoord.x < 300.0 && gl_FragCoord.y < 150.0){
-        gl_FragColor = vec4(vec3(density(vec3(uv * 2.0, 0.0))), 1.0);
+        gl_FragColor = vec4(vec3(sampleDensity(vec3(uv * 2.0, 0.0))), 1.0);
         return;
     }
 
     //test noise
     // gl_FragColor = vec4(vec3(noise(vec3(uv * 2.0, 0))), 1.0);
     // return;
-    vec4 color = raymarch(rayOrigin, rayDir);
+    vec3 transmittance;
+    vec3 scatteredLight;
+    raymarch(rayOrigin, rayDir, transmittance, scatteredLight);
+
+    vec3 background = 0.05 * vec3(0.09, 0.33, 0.81);
+
+    float mu = dot(rayDir, -lightDir);
+    background += getGlow(1.0-mu, 0.00015, 0.9);
+
+    vec4 color = vec4(vec3(background * transmittance + scatteredLight), 1.0);
+
     gl_FragColor = color;
 }
