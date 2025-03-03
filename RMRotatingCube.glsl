@@ -2,13 +2,15 @@
     precision mediump float;
 #endif
 
+
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
 
 const float maxDist = 100.;
-const float epsilon = 0.01;
-const vec4 bgColor = vec4(0.14, 0.59, 0.73, 1.0);
+const float epsilon = 0.00001;
+// const vec4 bgColor = vec4(0.14, 0.59, 0.73, 1.0);
+const vec4 bgColor = vec4(1.0);
 const int steps = 300;
 const vec3 lightDir = normalize(vec3(1.2, 1, -1.1));
 const vec3 lightColor = vec3(1.0,0.9,0.8);
@@ -41,17 +43,24 @@ mat2 rot2D(float angle)
 float sdfMap(vec3 pos)
 {
     vec3 boxSize = vec3(.1);
-    
-    pos = mod(pos, 1.0) - .5;
 
-    float ground = pos.y + 0.75;
+    pos.z += u_time;
+
+    // vec3 mpos = mod(pos, 1.) - .5;
+
+    pos.y += u_time * (step(1.0, mod(pos.z, 2.)) * 2.0 - 1.0);
+    pos.z += u_time * (step(1.0, mod(pos.x, 2.)) * 2.0 - 1.0);
+    float s = 1.0;
+    vec3 mpos = pos - floor((pos / s)) * s;
 
     // pos += vec3(1.0,0,0);
-    pos.xy *= rot2D(u_time);
+    // mpos.xy *= rot2D(u_time);
     // pos.xz *= rot2D(u_time);
-    float box = sdfBox(pos, boxSize);
+    // float box = sdfBox(mpos, boxSize);
+
+    float box = sdfSphere(mpos, vec3(s/2.), 0.2);
     
-    return min(ground, box);
+    return box;
 }
 
 vec3 calculateNormal(vec3 pos)
@@ -73,7 +82,7 @@ void main(){
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
     vec2 mx = (u_mouse.xy * 2.0 - u_resolution.xy) / u_resolution.y;
 
-    vec3 rayOrigin = vec3(0, 0, -u_time);
+    vec3 rayOrigin = vec3(0, 0, 0);
     vec3 rayDir = normalize(vec3(uv, 1.0));
 
     // rayOrigin.yz *= rot2D(mx.y);
@@ -86,21 +95,27 @@ void main(){
     float t = 0.0; // total dist
     vec3 color;
     vec3 pos;
+    int j = 0;
 
     for (int i = 0; i < steps; i++){
         pos = rayOrigin + rayDir * t;
-        m_dist = sdfMap(pos);
 
+        pos.y += sin(t) * .3;
+
+        m_dist = sdfMap(pos);
+        
         if (m_dist > maxDist || m_dist < epsilon) 
             break;
 
         t += m_dist;
+        j = i;
     }
     float diffuse = calculateDiffuse(pos);
+    float depth = t / 100.0;
     // vec3 N = calculateNormal(rayOrigin + rayDir * t);
     // float diffuse = max(dot(N, lightDir), 0.0);
 
-    color = lightColor * diffuse + ambientColor;
+    color = lightColor * depth + ambientColor + (float(j)*.005);
     // color *= exp( -0.1*t ); // fog 
     gl_FragColor = vec4(color, 1.0);
     if (m_dist > maxDist || m_dist > epsilon * 10.)

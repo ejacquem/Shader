@@ -36,7 +36,7 @@ float sdfMap(vec3 pos)
 
     float ground = pos.y + 2.0;
 
-    return min(ground, opSmoothUnion(s1, s2, 0.5));
+    return opSmoothUnion(ground, opSmoothUnion(s1, s2, 0.5), 0.5);
 }
 
 // vec3 calculateNormal(vec3 p) {
