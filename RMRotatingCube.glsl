@@ -7,7 +7,7 @@ uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
 
-const float maxDist = 100.;
+const float maxDist = 50.;
 const float epsilon = 0.00001;
 // const vec4 bgColor = vec4(0.14, 0.59, 0.73, 1.0);
 const vec4 bgColor = vec4(1.0);
@@ -42,25 +42,31 @@ mat2 rot2D(float angle)
 
 float sdfMap(vec3 pos)
 {
-    vec3 boxSize = vec3(.1);
+    // vec3 boxSize = vec3(.1);
 
-    pos.z += u_time;
+    // pos.z += u_time;
 
     // vec3 mpos = mod(pos, 1.) - .5;
 
-    pos.y += u_time * (step(1.0, mod(pos.z, 2.)) * 2.0 - 1.0);
-    pos.z += u_time * (step(1.0, mod(pos.x, 2.)) * 2.0 - 1.0);
+    pos.y += u_time;
+    float t = u_time * 0.1;
+    pos.y += t * ((mod(pos.z, 2.) <= 1.0) ? -0. : + 1.);
+    // pos.y += u_time * .1 * (step(1.0, mod(pos.z, 2.)) * 2.0 - 1.0);
+    // pos.z += u_time * (step(1.0, mod(pos.x, 2.)) * 2.0 - 1.0);
     float s = 1.0;
-    vec3 mpos = pos - floor((pos / s)) * s;
+    // vec3 mpos = pos - floor((pos / s)) * s;
+    vec3 mpos = fract(pos) * s - s/2.;
 
     // pos += vec3(1.0,0,0);
     // mpos.xy *= rot2D(u_time);
     // pos.xz *= rot2D(u_time);
     // float box = sdfBox(mpos, boxSize);
 
-    float box = sdfSphere(mpos, vec3(s/2.), 0.2);
+    vec3 center = vec3(0.0);
+
+    float sdf = sdfSphere(mpos, center, 0.05);
     
-    return box;
+    return sdf;
 }
 
 vec3 calculateNormal(vec3 pos)
@@ -100,7 +106,7 @@ void main(){
     for (int i = 0; i < steps; i++){
         pos = rayOrigin + rayDir * t;
 
-        pos.y += sin(t) * .3;
+        // pos.y += sin(t) * .3;
 
         m_dist = sdfMap(pos);
         
@@ -111,7 +117,7 @@ void main(){
         j = i;
     }
     float diffuse = calculateDiffuse(pos);
-    float depth = t / 100.0;
+    float depth = t / maxDist;
     // vec3 N = calculateNormal(rayOrigin + rayDir * t);
     // float diffuse = max(dot(N, lightDir), 0.0);
 

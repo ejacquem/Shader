@@ -100,7 +100,7 @@ void main() {
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
     uv = uv * 0.5 + 0.5;
 
-    float color = fbm(vec3(uv, u_time * 0.01)) * 0.5 + 0.5;
+    float color = fbm(vec3(uv, u_time * 0.1)) * 0.5 + 0.5;
     // color = remap(color, 0., 1., 0.0, 0.5);
     color *= color * color * color * color * 10.0;
 
