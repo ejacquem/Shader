@@ -130,7 +130,7 @@ void raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
     if(nearFar.x >= nearFar.y) return;
     vec3 pos = vec3(0);
     float stepSize = 0.01;
-    float t = nearFar.x + stepSize * hash11(nearFar.y / nearFar.x *0.1); // tot dist from ray origin (starts at near intersection)
+    float t = nearFar.x; // tot dist from ray origin (starts at near intersection)
 
     float ambient = 0.0;
     float phase = HenyeyGreenstein(0.001, dot(rayDir, lightDir));
