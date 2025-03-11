@@ -73,11 +73,11 @@ vec3 squareNorm(vec3 pos, vec3 boxMin, vec3 boxMax) {
 }
 
 float den1 = 0.05;
-float den2 = 0.5;
+float den2 = 0.2;
 
 float sampleDensity(vec3 pos){
-    pos.xy *= rot2D(u_time);
-    pos.zy *= rot2D(u_time);
+    // pos.xy *= rot2D(u_time);
+    // pos.zy *= rot2D(u_time);
     if (length(pos) < .4){
         if (length(pos) < .3)
             return den1;
@@ -97,10 +97,10 @@ vec3 lightRay(vec3 rayOrigin, vec3 rayDir)
     if(nearFar.x >= nearFar.y) return vec3(0.);
     vec3 pos = vec3(0);
     float dist = 0.0;
-    float stepSize = nearFar.y / 30.0;
+    float stepSize = nearFar.y / 15.0;
     vec3 transmittence = vec3(1.0);
 
-    for (int i = 1; i <= 30; i++)
+    for (int i = 1; i <= 15; i++)
     {
         pos = rayOrigin + rayDir * stepSize * float(i);
         float den = sampleDensity(pos);
@@ -137,8 +137,9 @@ void raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
     phase = 0.2;
 
     int refractionNb = 0;
+    float refractionLoss = 1.0;
 
-    for (int i = 0; i < 2000; i++)
+    for (int i = 0; i < 1000; i++)
     {
         pos = rayOrigin + rayDir * t;
         float density = sampleDensity(pos);
@@ -149,7 +150,7 @@ void raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
         vec3 S = (lightRay(pos,lightDir) * phase + ambient) * SigmaS;
         vec3 Tr = exp(-SigmaE * stepSize);
         vec3 Sint = (S - S * Tr) / SigmaE;
-        scatteredLight += transmittance * Sint;
+        scatteredLight += transmittance * Sint * refractionLoss;
         transmittance *= Tr;
 
         t += stepSize;
@@ -158,9 +159,10 @@ void raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
             rayOrigin = pos;
             rayDir = reflect(rayDir, squareNorm(pos, vec3(-cloudSize), vec3(cloudSize)));
             nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
+            refractionLoss *= 0.5;
             t = nearFar.x;
         }
-        if(refractionNb > 3)
+        if(refractionNb > 5)
             break;
     }
     return;
@@ -197,7 +199,7 @@ void main(){
     vec3 normal = intersectAABBNorm(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
     float dif = diffuse(normal, lightDir);
     float spec = specular(rayDir, normal, lightDir);
-    vec3 refractRayDir = refract(rayDir, normal, 0.99);
+    vec3 refractRayDir = refract(rayDir, normal, 0.97);
 
     vec3 scatteredLight = vec3(0.0);
     vec3 transmittance = vec3(1.0);

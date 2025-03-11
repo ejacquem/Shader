@@ -40,9 +40,9 @@ mat2 rot2D(float angle)
 
 float sdfMap(vec3 pos)
 {
-    vec3 boxSize = vec3(5.0);
+    vec3 center = vec3(5.0);
     
-    float box = sdfBox(pos, boxSize);
+    float box = sdfSphere(pos, vec3(0), 10.0);
     
     return box;
 }

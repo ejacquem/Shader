@@ -69,10 +69,8 @@ float calculateDiffuse(vec3 pos)
 
 void main(){
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
-    // vec2 uv = (gl_FragCoord.xy / u_resolution.xy) * 2.0 - 1.0; // [-1; 1]
-    // uv.x *= u_resolution.x / u_resolution.y;
 
-    vec3 rayOrigin = vec3(0, 0, -3);
+    vec3 rayOrigin = vec3(0, 0, -5);
     vec3 rayDir = normalize(vec3(uv, 1));
 
     float m_dist = maxDist;
