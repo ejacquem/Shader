@@ -50,7 +50,7 @@ float sdfMap(vec3 pos)
 
     pos.y += u_time;
     float t = u_time * 0.1;
-    pos.y += t * ((mod(pos.z, 2.) <= 1.0) ? -0. : + 1.);
+    // pos.y += t * ((mod(pos.z, 2.) <= 1.0) ? -0. : + 1.);
     // pos.y += u_time * .1 * (step(1.0, mod(pos.z, 2.)) * 2.0 - 1.0);
     // pos.z += u_time * (step(1.0, mod(pos.x, 2.)) * 2.0 - 1.0);
     float s = 1.0;

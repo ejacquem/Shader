@@ -10,7 +10,7 @@ const float maxDist = 1000.;
 const float epsilon = 0.01;
 const vec4 bgColor = vec4(0.14, 0.59, 0.73, 1.0);
 const int steps = 200;
-const vec3 lightDir = normalize(vec3(1.2, 1, -1.1));
+const vec3 lightDir = normalize(vec3(0, 1, -0.2));
 const vec3 lightColor = vec3(1.0,0.9,0.8);
 const vec3 ambientColor = vec3(0.19, 0.28, 0.37);
 
@@ -27,13 +27,24 @@ float sdfSphere(vec3 pos, vec3 center, float s)
 float sdfBox(vec3 pos, vec3 box)
 {
   vec3 q = abs(pos) - box;
-  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0) - 1.0;
+  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0) - 0.5;
 }
 
 float sdfOctahedron( vec3 p, float s)
 {
   p = abs(p);
   return (p.x+p.y+p.z-s)*0.57735027;
+}
+
+float sdfHexPrism( vec3 p, vec2 h )
+{
+  const vec3 k = vec3(-0.8660254, 0.5, 0.57735);
+  p = abs(p);
+  p.xy -= 2.0*min(dot(k.xy, p.xy), 0.0)*k.xy;
+  vec2 d = vec2(
+       length(p.xy-vec2(clamp(p.x,-k.z*h.x,k.z*h.x), h.x))*sign(p.y-h.x),
+       p.z-h.y );
+  return min(max(d.x,d.y),0.0) + length(max(d,0.0));
 }
 
 float opSmoothUnion( float d1, float d2, float k )
@@ -49,15 +60,69 @@ mat2 rot2D(float angle)
     return mat2(c, s, -s, c);
 }
 
+vec3 angularRepeat(vec3 m, float n) {
+   
+  float astep  = 2.*3.1415/n; 
+  float origin = -astep*0.5;
+  float angle  = atan(m.z, m.x) - origin;
+
+  angle = origin + mod(angle, astep);
+
+  float r = length(m.xz);
+
+  return vec3(cos(angle)*r, m.y, sin(angle)*r);
+}
+
+const float radius = 3.;
+const float subdivision = 8.;
+const float bottom_height = 4.;
+const float top_height = 3.;
+const float top_cut = 0.33;
+// https://www.shadertoy.com/view/dsyBDD
+float sdfDiamond(vec3 m) {
+    m = angularRepeat(m, subdivision);
+
+    vec2 p = m.xy;
+
+    float h1 = bottom_height;
+    float h2 = top_height;
+
+    vec2 origin = vec2(radius,0);
+    vec2 normal1 = normalize(vec2(h1,-radius));
+    vec2 normal2 = normalize(vec2(h2,radius));
+    
+    float d1 = dot(p-origin, normal1);
+    float d2 = dot(p-origin, normal2);    
+    
+    float d = max(d1, d2);
+    float vdist = max(m.y - h2*top_cut, -h1-m.y);
+    
+    return max(d, vdist);
+}
+
 float sdfMap(vec3 pos)
 {
-    pos.y += sin(u_time * 2.0);
-    pos.zx *= rot2D(u_time * 0.8);
+    // pos.y += sin(u_time * 2.0);
     vec3 boxSize = vec3(2.0);
     
     // float box = sdfSphere(pos, vec3(0), 3.0);
-    // float box = sdfBox(pos, boxSize);
-    float box = sdfOctahedron(pos, 3.0);
+    float box = sdfBox(pos, boxSize);
+    // float box = sdfOctahedron(pos, 3.0);
+    // float box = sdfHexPrism(pos, vec2(2,2));
+    // float box = sdfDiamond(pos);
+
+
+    vec3 s1Center = vec3(cos(u_time + 3.14) * 2. ,sin(u_time + 3.14) * 2.,5);
+    float s1Size = 3.;
+    vec3 s2Center = vec3(cos(u_time) * 2. ,sin(cos(u_time)) * 2.,5);
+    float s2Size = 4.;
+    float s3 = sdfBox(pos, boxSize);
+    pos.zx *= rot2D(u_time * 0.8);
+    float s1 = sdfSphere(pos, s1Center, s1Size);
+    float s2 = sdfSphere(pos, s2Center, s2Size);
+
+
+    return opSmoothUnion(opSmoothUnion(s1, s2, 0.5), s3, 0.5);
     
     return box;
 }
@@ -75,17 +140,6 @@ float calculateDiffuse(vec3 pos)
 {
     float eps = 0.0001;
     return clamp((sdfMap(pos+eps*lightDir)-sdfMap(pos))/eps,0.0,1.0);
-}
-
-float den1 = 0.05;
-float den2 = 0.2;
-float sampleDensity(vec3 pos){
-    // pos.xy *= rot2D(u_time);
-    // pos.zy *= rot2D(u_time);
-    // if (length(pos) < .4){
-    //     return den2;
-    // }
-    return den1;
 }
 
 float diffuse(vec3 normal, vec3 lightDir){
@@ -120,10 +174,8 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
         if (sign(prev_dist) != sign(m_dist)){ // ray went through surface if sign flip
             vec3 normal = calculateNormal(pos);
             float dif = diffuse(normal, lightDir);
-            float spec = max(
-                specular(rayDir, normal, lightDir), 
-                specular(rayDir, normal, vec3(0,-1,0)));
-            scatteredLight += (3.0 * spec + dif) * refractionLoss;
+            float spec = specular(rayDir, normal, lightDir);
+            scatteredLight += (5.0 * spec + dif) * refractionLoss;
             if (sign(prev_dist) == -1.0){ // if ray was inside the object, reflect
                 reflexion++;
                 if (reflexion > maxReflection)
@@ -167,9 +219,10 @@ void main(){
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
     vec2 mx = (u_mouse.xy * 2.0 - u_resolution.xy) / u_resolution.y;
 
-    vec3 rayOrigin = vec3(0, 0, -10);
-    vec3 rayDir = normalize(vec3(uv, 1.0));
+    vec3 rayOrigin = vec3(0, 0, -0.1);
+    vec3 rayDir = normalize(vec3(uv, 0.5));
 
+    mx*=4.0;
     rayOrigin.yz *= rot2D(mx.y);
     rayDir.yz *= rot2D(mx.y);
 
@@ -182,9 +235,9 @@ void main(){
     vec3 pos = result.xyz;
     float m_dist = result.w;
 
-    vec3 background = bgColor.rgb;
+    vec3 background = vec3(0);
     float mu = dot(rayDir, lightDir);
     background += getGlow(1.0-mu, 0.00015, 1.0);
 
-    gl_FragColor = vec4(transmittance * scatteredLight, 1.0);
+    gl_FragColor = vec4(background + transmittance * scatteredLight, 1.0);
 }
