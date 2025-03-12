@@ -9,19 +9,22 @@ uniform float u_time;
 const float maxDist = 1000.;
 const float epsilon = 0.01;
 const vec4 bgColor = vec4(0.14, 0.59, 0.73, 1.0);
-const int steps = 200;
+const int steps = 2000;
 const vec3 lightDir = normalize(vec3(1, 1, 1));
 const vec3 lightColor = vec3(1.0,0.9,0.8);
 const vec3 ambientColor = vec3(0.19, 0.28, 0.37);
 
+#define PAL1 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.33,0.67)
+#define PAL2 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.10,0.20) 
+#define PAL3 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.3,0.20,0.20)
+#define PAL4 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,0.5),vec3(0.8,0.90,0.30)
+#define PAL5 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,0.7,0.4),vec3(0.0,0.15,0.20)
+#define PAL6 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(2.0,1.0,0.0),vec3(0.5,0.20,0.25)
+#define PAL7 vec3(0.8,0.5,0.4),vec3(0.2,0.4,0.2),vec3(2.0,1.0,1.0),vec3(0.0,0.25,0.25)
 // https://iquilezles.org/articles/palettes/
 // cosine based palette, 4 vec3 params
-vec3 palette( in float t)
+vec3 palette(float t,vec3 a,vec3 b,vec3 c,vec3 d )
 {
-    vec3 a = vec3(0.5, 0.5, 0.5), 
-        b = vec3(0.5, 0.5, 0.5), 
-        c = vec3(1.0, 1.0, 1.0), 
-        d = vec3(0.00, 0.33, 0.67);
     return a + b*cos( 6.283185*(c*t+d) );
 }
 
@@ -37,63 +40,120 @@ mat2 rot2D(float angle)
     return mat2(c, s, -s, c);
 }
 
-vec3 angularRepeat(vec3 m, float n) {
-   
-  float astep  = 2.*3.1415/n; 
-  float origin = -astep*0.5;
-  float angle  = atan(m.z, m.x) - origin;
-
-  angle = origin + mod(angle, astep);
-
-  float r = length(m.xz);
-
-  return vec3(cos(angle)*r, m.y, sin(angle)*r);
-}
-
-const float radius = 3.;
-const float subdivision = 8.;
-const float bottom_height = 4.;
-const float top_height = 3.;
-const float top_cut = 0.33;
-// https://www.shadertoy.com/view/dsyBDD
-float sdfDiamond(vec3 m) {
-    m = angularRepeat(m, subdivision);
-
-    vec2 p = m.xy;
-
-    float h1 = bottom_height;
-    float h2 = top_height;
-
-    vec2 origin = vec2(radius,0);
-    vec2 normal1 = normalize(vec2(h1,-radius));
-    vec2 normal2 = normalize(vec2(h2,radius));
-    
-    float d1 = dot(p-origin, normal1);
-    float d2 = dot(p-origin, normal2);    
-    
-    float d = max(d1, d2);
-    float vdist = max(m.y - h2*top_cut, -h1-m.y);
-    
-    return max(d, vdist);
-}
-
 float sdfOctahedron( vec3 p, float s)
 {
   p = abs(p);
   return (p.x+p.y+p.z-s)*0.57735027;
 }
 
+float sdfSphere(vec3 pos, float s)
+{
+  return length(pos) - s;
+}
+
+float sdfBox(vec3 pos, vec3 box)
+{
+  vec3 q = abs(pos) - box;
+  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+}
+
+float sdPlane(vec3 p, vec3 n, float h)
+{
+  // n must be normalized
+  return dot(p,n) + h;
+}
+
+// return the given sdf cut by the plane
+float sdfPlaneCut(float sdf, vec3 p, vec3 n, float h)
+{
+  // n must be normalized
+  return max(sdf, dot(p,n) + h);
+}
+
+// #define N2 0.707106781 // 1/sqrt(2)
+#define N2 1./sqrt(2.)
+#define N3 1./sqrt(3.)
+#define N5 1./sqrt(5.)
+#define _2N5 2./sqrt(5.)
+#define _2N2 2./sqrt(2.)
+
+float sdFacetedGem(vec3 p) {
+    p.y = abs(p.y);
+    // float d = sdfOctahedron(p, 10.0);
+    float d = sdfSphere(p, 10.0);
+    float h;
+    d = sdfPlaneCut(d, p, vec3(0, -1, 0), -2.0);  // bot cut
+    d = sdfPlaneCut(d, p, vec3(0, +1, 0), -2.0);  // top cut
+    d = sdfPlaneCut(d, p, vec3(-1, 0, 0), -4.0);  // Left cut
+    d = sdfPlaneCut(d, p, vec3(+1, 0, 0), -4.0);  // Right cut
+    d = sdfPlaneCut(d, p, vec3(0, 0, -1), -4.0);  // Front cut
+    d = sdfPlaneCut(d, p, vec3(0, 0, +1), -4.0);  // Back cut
+
+    h = -3.7;
+    d = sdfPlaneCut(d, p, vec3(+N2, +N2, 0), h);  // topRight cut
+    d = sdfPlaneCut(d, p, vec3(-N2, +N2, 0), h);  // topRight cut
+    d = sdfPlaneCut(d, p, vec3(0, +N2, +N2), h);  // topBack cut
+    d = sdfPlaneCut(d, p, vec3(0, +N2, -N2), h);  // topFront cut
+
+    h = -4.7;
+    d = sdfPlaneCut(d, p, vec3(-0.5, N2, +0.5), h);  // topRight corner cut
+    d = sdfPlaneCut(d, p, vec3(+0.5, N2, +0.5), h);  // topRight corner cut
+    d = sdfPlaneCut(d, p, vec3(-0.5, N2, -0.5), h);  // topRight corner cut
+    d = sdfPlaneCut(d, p, vec3(+0.5, N2, -0.5), h);  // topRight corner cut
+
+    h = -5.4;
+    d = sdfPlaneCut(d, p, vec3(-N2, 0, +N2), h);  // Left cut
+    d = sdfPlaneCut(d, p, vec3(+N2, 0, +N2), h);  // Left cut
+    d = sdfPlaneCut(d, p, vec3(-N2, 0, -N2), h);  // Left cut
+    d = sdfPlaneCut(d, p, vec3(+N2, 0, -N2), h);  // Left cut
+
+    h = -3.1;
+    d = sdfPlaneCut(d, p, vec3(+N5, +_2N5, 0), h);  // topRight cut
+    d = sdfPlaneCut(d, p, vec3(-N5, +_2N5, 0), h);  // topRight cut
+    d = sdfPlaneCut(d, p, vec3(0, +_2N5, +N5), h);  // topBack cut
+    d = sdfPlaneCut(d, p, vec3(0, +_2N5, -N5), h);  // topFront cut
+    // d = max(d, -sdPlane(p, vec3(0, -1, 0), -0.2)); // Bottom cut
+    return d;
+}
+
+#define N normalize
+
+float sdfCustomGem(vec3 p){
+    // return sdFacetedGem(p);
+
+    p.xz = abs(p.xz);
+    // float d = sdfOctahedron(p, 10.0);
+    // float d = sdfBox(p, vec3(5.0));
+    float d = sdfSphere(p, 10.0);
+    float h;
+    d = sdfPlaneCut(d, p, vec3(0, +1, 0), -2.0);  // top cut
+    d = sdfPlaneCut(d, p, N(vec3(1, 2, 2)), -5.0);  // top diag Left cut
+    d = sdfPlaneCut(d, p, N(vec3(2, 2, 1)), -5.0);  // top diag right cut
+    d = sdfPlaneCut(d, p, N(vec3(1, 3, 1)), -3.35);  // top front cut
+    d = sdfPlaneCut(d, p, N(vec3(0, 3, 1)), -3.);  // top left cut
+    d = sdfPlaneCut(d, p, N(vec3(1, 3, 0)), -3.0);  // top right cut
+    // d = sdfPlaneCut(d, p, N(vec3(2, 3, 1)), -3.5);  // top front cut
+
+    //bottom
+    d = sdfPlaneCut(d, p, N(vec3(1, -1.8, 2.5)), -5.2);
+    d = sdfPlaneCut(d, p, N(vec3(2.5, -1.8, 1)), -5.2);
+    d = sdfPlaneCut(d, p, N(vec3(2., -2.5, 2.0)), -5.2);
+    // d = sdfPlaneCut(d, p, N(vec3(1, -3.0, 2.5)), -5.2);
+    return d;
+}
+
 float sdfMap(vec3 pos)
 {
+    return sdfCustomGem(pos);
     // pos.y += sin(u_time * 2.0);
-    // pos.zx *= rot2D(u_time * 0.8);
+    // pos.zx *= rot2D(u_time * 0.08);
     vec3 p = pos;
 
     float offset = 3.5; 
 
     float s1 = sdfOctahedron(p, 5.);
     // s1 = max(s1, -sdfOctahedron(p, 1.));
-    return s1;
+    // return s1;
 
     p = pos;
     p.y += offset;
@@ -102,7 +162,7 @@ float sdfMap(vec3 pos)
     p.y -= offset;
     float s3 = sdfOctahedron(p, 2.);
 
-    // return min(min(s1, s2),s3);
+    return min(min(s1, s2),s3);
 
     p = pos;
     p.x += offset;
@@ -139,23 +199,11 @@ float diffuse(vec3 normal, vec3 lightDir){
     return max(dot(normal, lightDir), 0.0);
 }
 
-float specular(vec3 rayDir, vec3 normal, vec3 lightDir){
+float specular(vec3 rayDir, vec3 normal, vec3 lightDir, float po){
     vec3 reflectDir = reflect(lightDir, normal);  
 
-    float spec = pow(max(dot(rayDir, reflectDir), 0.0), 1280.);
+    float spec = pow(max(dot(rayDir, reflectDir), 0.0), po);
     return spec;
-}
-
-//get the color based on the normal
-vec3 get_color(vec3 normal){
-    if(normal.x > 0. && normal.z > 0.)
-        return palette(0.0);
-    if(normal.x > 0. && normal.z < 0.)
-        return palette(0.25);
-    if(normal.x < 0. && normal.z > 0.)
-        return palette(0.5);
-    if(normal.x < 0. && normal.z < 0.)
-        return palette(1.0);
 }
 
 const int maxReflection = 5;
@@ -171,7 +219,9 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
     float refractionLoss = 1.0;
     bool first = true;
 
-    vec3 SigmaE = vec3(0.4,0.9,0.9);
+    vec3 SigmaE = vec3(0.1922, 0.7804, 0.749);
+    // vec3 SigmaE = 1.0 - palette(rayDir.x, PAL7);
+    // vec3 SigmaE = vec3(1.);
 
     for (int i = 0; i < steps; i++){
         prev_pos = pos;
@@ -179,40 +229,39 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
         prev_dist = m_dist;
         m_dist = sdfMap(pos);
 
+        if (m_dist < 0.0){
+            float density = 0.05 / refractionLoss;
+            vec3 Tr = exp(-SigmaE * density * abs(m_dist));
+            transmittance *= Tr;
+        }
+
         if (sign(prev_dist) != sign(m_dist)){ // ray went through surface if sign flip
             vec3 normal = calculateNormal(pos);
-            float dif = diffuse(normal, lightDir);
-            float spec = specular(rayDir, normal, lightDir) * 10.0;
-            scatteredLight += (spec + dif) * refractionLoss * 3.0;
+            float dif = diffuse(normal, lightDir) * 1.0;
             if (prev_dist < 0.){ // if ray was inside the object, reflect
                 reflexion++;
                 if (reflexion > maxReflection)
                     break;
                 rayDir = reflect(rayDir, normal);
                 rayOrigin = prev_pos;
-                refractionLoss *= .6;
                 t = 0.;
+                // SigmaE = palette(rayDir.x, PAL2);
+                refractionLoss *= .65;
                 continue;
             }
             else if (first){
                 first = false;
-                rayDir = refract(rayDir, normal, 0.99);
-                // SigmaE = get_color(normal) * 1.2;
+                rayDir = refract(rayDir, normal, 0.95);
+
+                rayOrigin = prev_pos;
+                t = 0.;
+                // float spec = specular(rayDir, normal, lightDir, 100.) * 10.0;
+                // scatteredLight += spec + dif;
             }
+            float spec = specular(rayDir, normal, lightDir, 100.) * 10.0;
+            scatteredLight += (spec + dif) * refractionLoss * transmittance;
         }
 
-        if (m_dist < 0.0){
-            float density = 0.05 / refractionLoss;
-
-            // vec3 SigmaS = sigmaScattering * density;
-            // vec3 SigmaE = sigmaExtinction * density;
-
-            // vec3 S = (lightRay(pos,lightDir) * phase + ambient) * SigmaS;
-            vec3 Tr = exp(-SigmaE * density * abs(m_dist));
-            // vec3 Sint = (S - S * Tr) / SigmaE;
-            // scatteredLight += transmittance * Sint * refractionLoss;
-            transmittance *= Tr;
-        }
         if (m_dist > maxDist /*|| m_dist < epsilon*/) 
             break;
 
@@ -225,7 +274,7 @@ void main(){
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
     vec2 mx = (u_mouse.xy * 2.0 - u_resolution.xy) / u_resolution.y;
 
-    vec3 rayOrigin = vec3(0, 0, -10.);
+    vec3 rayOrigin = vec3(0, 0, -15.);
     vec3 rayDir = normalize(vec3(uv, 1.0));
 
     mx*=4.0;
@@ -239,9 +288,13 @@ void main(){
     vec3 transmittance = vec3(1.0);
     vec4 result = raymarch(rayOrigin, rayDir, transmittance, scatteredLight);
 
-    vec3 background = vec3(0);
+    vec3 background = vec3(.5);
     float mu = dot(rayDir, lightDir);
-    background += getGlow(1.0-mu, 0.00015, 1.0);
+    background += getGlow(1.0-mu, 0.00015, .5);
 
-    gl_FragColor = vec4(background + transmittance * scatteredLight, 1.0);
+    vec3 color = background;
+    if (transmittance.r < 1.0)
+        color = transmittance + (scatteredLight * 0.05);
+
+    gl_FragColor = vec4(color, 1.0);
 }
