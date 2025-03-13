@@ -11,8 +11,8 @@ const float epsilon = 0.01;
 const int steps = 300;
 
 const vec3 lightDir = normalize(vec3(1, 1, 1));
-const vec3 gemColor = vec3(0.78, 0.19, 0.19);
-const int colorIndex = 0; // 0 is default unicolor
+const vec3 gemColor = vec3(0.85, 0.11, 0.11);
+const int colorIndex = 7; // 0 is default unicolor
 
 #define PAL1 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.33,0.67)
 #define PAL2 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.10,0.20) 
@@ -124,8 +124,8 @@ float sdfCustomGem(vec3 p){
 
 float sdfMap(vec3 pos)
 {
-    // pos.zx *= rot2D(u_time * 0.8);
-    // pos.y += sin(u_time * 2.0);
+    pos.zx *= rot2D(u_time * 0.8);
+    pos.y += sin(u_time * 2.0);
     return sdfCustomGem(pos);
     vec3 p = pos;
     float offset = 3.5; 

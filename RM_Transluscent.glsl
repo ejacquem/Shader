@@ -9,16 +9,8 @@ uniform vec2 u_mouse;
 uniform float u_time;
 uniform float u_mouseButton;
 
-const float maxDist = 100.;
-const float epsilon = 0.01;
 const vec4 bgColor = vec4(0.15, 0.69, 0.86, 1.0);
-const vec4 spColor = vec4(1.0);
-const int steps = 200;
 vec3 lightDir = normalize(vec3(0.1, 1, 0.5));
-const vec3 lightColor = vec3(1.0,0.9,0.8);
-const vec3 ambientColor = vec3(0.19, 0.28, 0.37);
-const vec3 pointLight = vec3(0,0,-2);
-const float pointLightI = 3.0; // intensity
 const float cloudSize = 0.5;
 
 
@@ -72,65 +64,79 @@ vec3 squareNorm(vec3 pos, vec3 boxMin, vec3 boxMax) {
     return vec3(0, 0, sign(pos.z));
 }
 
-float den1 = 0.05;
-float den2 = 0.2;
+const float den1 = 0.05;
+const float den2 = 0.2;
+const float scale = 0.99;
+const float bigCircleSize = 0.4 * scale;
+const float smallCircleSize = 0.3 * scale;
+const float circleWidth = 0.05 * scale;
 
-float sampleDensity(vec3 pos){
-    // pos.xy *= rot2D(u_time);
-    // pos.zy *= rot2D(u_time);
-    if (length(pos) < .4){
-        if (length(pos) < .3)
-            return den1;
-        if (length(pos.xxx) < 0.1)
-            return den2;
-        if (length(pos.yyy) < 0.1)
-            return den2;
-        if (length(pos.zzz) < 0.1)
+// float sampleDensity(vec3 pos){
+//     // pos.xy *= rot2D(u_time);
+//     // pos.zy *= rot2D(u_time);
+//     if (length(pos) < smallCircleSize)
+//         return den1;
+//     if (length(pos) < bigCircleSize){
+//         if (length(pos.xxx) < circleWidth)
+//             return den2;
+//         if (length(pos.yyy) < circleWidth)
+//             return den2;
+//         if (length(pos.zzz) < circleWidth)
+//             return den2;
+//     }
+//     return den1;
+// }
+float sampleDensity(vec3 pos) {
+    float lenSq = dot(pos, pos);
+
+    if (lenSq < smallCircleSize * smallCircleSize)
+        return den1;
+
+    if (lenSq < bigCircleSize * bigCircleSize) {
+        float circleWidthSq = circleWidth * circleWidth;
+
+        if (pos.x*pos.x < circleWidthSq || pos.y*pos.y < circleWidthSq || pos.z*pos.z < circleWidthSq)
             return den2;
     }
     return den1;
 }
+
 
 vec3 lightRay(vec3 rayOrigin, vec3 rayDir)
 {
     vec2 nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
     if(nearFar.x >= nearFar.y) return vec3(0.);
     vec3 pos = vec3(0);
-    float dist = 0.0;
-    float stepSize = nearFar.y / 15.0;
-    vec3 transmittence = vec3(1.0);
+    float stepSize = nearFar.y / 30.0;
+    vec3 accumulatedDensity = vec3(0.0);
+    vec3 sigmaStep = sigmaExtinction * stepSize;
 
-    for (int i = 1; i <= 15; i++)
+    for (int i = 1; i <= 30; i++)
     {
         pos = rayOrigin + rayDir * stepSize * float(i);
-        float den = sampleDensity(pos);
-        transmittence *= exp(-stepSize * (den * sigmaExtinction));
+        accumulatedDensity += sampleDensity(pos) * sigmaStep;
     }
-    return transmittence * 10.0;
+    return exp(-accumulatedDensity) * 10.0;
 }
 
 float HenyeyGreenstein(float g, float costh){
 	return (1.0 / (4.0 * 3.1415))  * ((1.0 - g * g) / pow(1.0 + g*g - 2.0*g*costh, 1.5));
 }
 
-/*
-sampleSigmaS = sigmaScattering∗density
-sampleSigmaE = sigmaExtinction∗density
-ambient = gradient∗precipitation∗globalAmbientColor
-S = (evaluateLight(directionToSun,position)∗phase+ambient)∗sampleSigmaS
-Tr = exp(−sampleSigmaE ∗ stepSize)
-/∗ Analytical integration of light / transmittance between the steps ∗/
-Sint = (S − S ∗ Tr) / sampleSigmaE
-scatteredLight += transmittance ∗ Sint
-transmittance ∗= Tr
-*/
+const float optiEpsilon = 0.1;
+
 void raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 scatteredLight)
 {
     vec2 nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
     if(nearFar.x >= nearFar.y) return;
     vec3 pos = vec3(0);
-    float stepSize = 0.01;
+    // vec3 prev_pos = pos;
+    float density = den1; 
+    float prev_density = den1;
+    float stepSize = 0.02;
     float t = nearFar.x; // tot dist from ray origin (starts at near intersection)
+    float prev_t = t;
+    bool backtracking = false;
 
     float ambient = 0.0;
     float phase = HenyeyGreenstein(0.001, dot(rayDir, lightDir));
@@ -139,10 +145,11 @@ void raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
     int refractionNb = 0;
     float refractionLoss = 1.0;
 
-    for (int i = 0; i < 1000; i++)
+    for (int i = 0; i < 400; i++)
     {
         pos = rayOrigin + rayDir * t;
-        float density = sampleDensity(pos);
+        prev_density = density;
+        density = sampleDensity(pos);
 
         vec3 SigmaS = sigmaScattering * density;
         vec3 SigmaE = sigmaExtinction * density;
@@ -153,6 +160,7 @@ void raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
         scatteredLight += transmittance * Sint * refractionLoss;
         transmittance *= Tr;
 
+        prev_t = t;
         t += stepSize;
         if(t > nearFar.y){
             refractionNb++;

@@ -56,6 +56,17 @@ vec3 calculateNormal(vec3 pos)
 					  e.xxx*sdfMap( pos + e.xxx ) );
 }
 
+float diffuse(vec3 normal, vec3 lightDir){
+    return max(dot(normal, lightDir), 0.0);
+}
+
+float specular(vec3 rayDir, vec3 normal, vec3 lightDir, float po){
+    vec3 reflectDir = reflect(lightDir, normal);  
+
+    float spec = pow(max(dot(rayDir, reflectDir), 0.0), po);
+    return spec;
+}
+
 float calculateDiffuse(vec3 pos)
 {
     float eps = 0.0001;
