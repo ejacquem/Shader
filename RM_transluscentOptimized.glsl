@@ -62,7 +62,7 @@ vec3 squareNorm(vec3 pos, vec3 boxMin, vec3 boxMax) {
     return vec3(0, 0, sign(pos.z));
 }
 
-const float den1 = 0.025;
+const float den1 = 0.005;
 const float den2 = 0.1;
 const float scale = 2.0;
 const float bigCircleSize = 0.4 * scale;
@@ -99,7 +99,6 @@ float sampleDensity(vec3 pos) {
     return den1;
 }
 
-
 vec3 lightRay(vec3 rayOrigin, vec3 rayDir)
 {
     vec2 nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
@@ -123,6 +122,10 @@ float HenyeyGreenstein(float g, float costh){
 
 const float optiEpsilon = 0.1;
 
+const float outerCloudSize = 1.0;
+const float innerCloudSize = 0.2;
+
+
 void raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 scatteredLight)
 {
     vec2 nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
@@ -130,45 +133,38 @@ void raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
     vec3 pos = vec3(0);
     // vec3 prev_pos = pos;
     float density = den1; 
-    float prev_density = den1;
     float stepSize = 0.015;
     float t = max(0.0, nearFar.x); // tot dist from ray origin (starts at near intersection)
-    float prev_t = t;
 
     float ambient = 0.0;
-    float phase = HenyeyGreenstein(0.01, dot(rayDir, lightDir));
+    float phase = HenyeyGreenstein(0.001, dot(rayDir, lightDir));
     phase = 0.2;
 
     int refractionNb = 0;
+    const int maxRefraction = 3;
     float refractionLoss = 1.0;
 
-    for (int i = 0; i < 300; i++)
+    for (int i = 0; i < maxRefraction; i++)
     {
-        pos = rayOrigin + rayDir * t;
-        prev_density = density;
-        density = sampleDensity(pos);
+        vec2 nearFarOuter = intersectAABB(rayOrigin, rayDir, vec3(-outerCloudSize), vec3(outerCloudSize));
+        vec2 nearFarInner = intersectAABB(rayOrigin, rayDir, vec3(-innerCloudSize), vec3(innerCloudSize));
+
+        float distInner = max(0.0, nearFarInner.y - nearFarInner.x);
+        float distOuter = max(0.0, nearFarOuter.y - nearFarOuter.x);
+        density = distInner * den2 + (distOuter - distInner) * den1;
 
         vec3 SigmaS = sigmaScattering * density;
         vec3 SigmaE = sigmaExtinction * density;
 
         vec3 S = (lightRay(pos,lightDir) * phase + ambient) * SigmaS;
-        vec3 Tr = exp(-SigmaE * stepSize);
+        vec3 Tr = exp(-SigmaE * distOuter);
         vec3 Sint = (S - S * Tr) / SigmaE;
         scatteredLight += transmittance * Sint * refractionLoss;
         transmittance *= Tr;
 
-        prev_t = t;
-        t += stepSize;
-        if(t > nearFar.y){
-            refractionNb++;
-            rayOrigin = pos;
-            rayDir = reflect(rayDir, squareNorm(pos, vec3(-cloudSize), vec3(cloudSize)));
-            nearFar = intersectAABB(rayOrigin, rayDir, vec3(-cloudSize), vec3(cloudSize));
-            refractionLoss *= 0.5;
-            t = nearFar.x;
-        }
-        if(refractionNb > 5)
-            break;
+        rayOrigin = rayOrigin + rayDir * distOuter;
+        rayDir = reflect(rayDir, squareNorm(pos, vec3(-cloudSize), vec3(cloudSize)));
+        refractionLoss *= 0.99;
     }
     return;
 }

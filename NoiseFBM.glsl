@@ -90,6 +90,7 @@ float fbm(vec3 st) {
   }
   return _sin;
 }
+
 // (float value, float old_low, float old_high, float new_low, float new_high)
 float remap(float v, float ol, float oh, float nl, float nh){
   float ret_val = nl + ( v - ol ) * ( nh - nl ) / ( oh - ol );
