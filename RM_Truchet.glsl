@@ -8,7 +8,7 @@ uniform vec2 u_mouse;
 uniform float u_time;
 
 const float maxDist = 50.;
-const float epsilon = 0.003;
+const float epsilon = 0.0005;
 // const vec4 bgColor = vec4(0.14, 0.59, 0.73, 1.0);
 const vec4 bgColor = vec4(1.0);
 const int steps = 500;
@@ -28,6 +28,13 @@ float hash13(vec3 p3)
 {
 	p3  = fract(p3 * .1031);
     p3 += dot(p3, p3.zyx + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float hash12(vec2 p)
+{
+	vec3 p3  = fract(vec3(p.xyx) * .1031);
+    p3 += dot(p3, p3.yzx + 33.33);
     return fract((p3.x + p3.y) * p3.z);
 }
 
@@ -61,6 +68,44 @@ mat2 rot2D(float angle)
     return mat2(c, s, -s, c);
 }
 
+float sdRotatingTorus(vec3 pos, vec2 t, float r /*rotation dir*/){
+    float sdf = 1000.;
+    vec3 center = vec3(0,0.0,0);
+
+    vec3 p = pos;
+    p.xz *= rot2D(radians(u_time * 10. * r));
+
+    sdf = min(sdf, sdTorus(p, t));
+    float o = t.x;
+    float s = 0.1;
+    sdf = min(sdf, sdfSphere(p, vec3(+o,.0,+0), s));
+    sdf = min(sdf, sdfSphere(p, vec3(+0,.0,+o), s));
+    sdf = min(sdf, sdfSphere(p, vec3(+0,.0,-o), s));
+    sdf = min(sdf, sdfSphere(p, vec3(-o,.0,+0), s));
+
+    t.x *= s * 2.0;
+    t.y *= 0.5;
+
+    p = pos;
+    p.z += o;
+    p.xy *= rot2D(radians(90.));
+    sdf = min(sdf, sdTorus(p, t));
+    p = pos;
+    p.z -= o;
+    p.xy *= rot2D(radians(90.));
+    sdf = min(sdf, sdTorus(p, t));
+    p = pos;
+    p.x += o;
+    p.zy *= rot2D(radians(90.));
+    sdf = min(sdf, sdTorus(p, t));
+    p = pos;
+    p.x -= o;
+    p.zy *= rot2D(radians(90.));
+    sdf = min(sdf, sdTorus(p, t));
+
+    return sdf;
+}
+
 float sdfMap(vec3 pos)
 {
     float t = u_time * 0.1;
@@ -73,21 +118,29 @@ float sdfMap(vec3 pos)
 
     // float sdf = sdfSphere(mpos, center, size);
     // float sdf = sdfBox(mpos, vec3(size));
-    vec3 p;
+    vec3 p = mpos;
     float sdf = maxDist;
     float d = 0.5; // circle offset
     float s = 0.5; // circle size
-    float w = 0.06;// circle width
+    float w = 0.05;// circle width
+
+
+    // sdf = min(sdf, sdRotatingTorus(p, vec2(0.5, 0.5)));
+
+    vec3 rand = hash33(floor(pos)); 
+    // mpos.x *= (rand.x < 0.5) ? -1.0 : 1.0;
+    // mpos.y *= (rand.y < 0.5) ? -1.0 : 1.0;
+    // mpos.z *= (rand.z < 0.5) ? -1.0 : 1.0;
     p = mpos + vec3(d,0,d);
-    sdf = min(sdf, sdTorus(p, vec2(s, w)));
+    sdf = min(sdf, sdRotatingTorus(p, vec2(s, w), 1.0));
 
     p = mpos + vec3(0,d,-d);
     p.xy *= rot2D(radians(90.));
-    sdf = min(sdf, sdTorus(p, vec2(s, w)));
+    sdf = min(sdf, sdRotatingTorus(p, vec2(s, w), 1.0));
 
     p = mpos + vec3(-d,-d,0);
-    p.zy *= rot2D(radians(90.));
-    sdf = min(sdf, sdTorus(p, vec2(s, w)));
+    p.zy *= rot2D(radians(-90.));
+    sdf = min(sdf, sdRotatingTorus(p, vec2(s, w), 1.0));
     
     return sdf;
 }
@@ -118,7 +171,7 @@ void main(){
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
     vec2 mx = (u_mouse.xy * 2.0 - u_resolution.xy) / u_resolution.y;
 
-    vec3 rayOrigin = vec3(0,0,0);
+    vec3 rayOrigin = vec3(0,0,u_time * 0.0);
     vec3 rayDir = normalize(vec3(uv, 1.0));
 
     mx *= 4.0;
@@ -160,15 +213,17 @@ void main(){
         }
         j++;
     }
-    float diffuse = calculateDiffuse(pos);
+    // float diffuse = calculateDiffuse(pos);
     float depth = distance(pos, rayOrigin) / maxDist;
-    // vec3 N = calculateNormal(rayOrigin + rayDir * t);
-    // float diffuse = max(dot(N, lightDir), 0.0);
+    vec3 N = calculateNormal(pos);
+    float diffuse = max(dot(N, -rayDir), 0.0);
 
     vec3 sphereColor = hash33(floor(pos) + time * 0.00002);
+    sphereColor = vec3(1.0);
 
-    float ambient = 0.6;
-    color = (sphereColor + sphereColor * diffuse) * ambient * (1.0 - depth);
+    vec3 ambient = sphereColor * 0.5;
+    float outline = float(j) * float(j) * 0.0001;
+    color = (ambient + diffuse * 0.3) * (1.0 - depth) - outline;
     // color *= exp( -0.1*t ); // fog 
     gl_FragColor = vec4(color, 1.0);
     if (m_dist > maxDist || m_dist > epsilon * 10.)
