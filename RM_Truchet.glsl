@@ -107,11 +107,17 @@ float sdRotatingTorus(vec3 pos, vec2 t, float r /*rotation dir*/){
 
     sdf = min(sdf, sdTorus(p, t));
     float o = t.x;
+    float o2 = t.x / 1.4142;
     float s = 0.09;
     sdf = min(sdf, sdfSphere(p, vec3(+o,.0,+0), s));
     sdf = min(sdf, sdfSphere(p, vec3(+0,.0,+o), s));
     sdf = min(sdf, sdfSphere(p, vec3(+0,.0,-o), s));
     sdf = min(sdf, sdfSphere(p, vec3(-o,.0,+0), s));
+
+    sdf = min(sdf, sdfSphere(p, vec3(+o2,.0,+o2), s));
+    sdf = min(sdf, sdfSphere(p, vec3(+o2,.0,-o2), s));
+    sdf = min(sdf, sdfSphere(p, vec3(-o2,.0,+o2), s));
+    sdf = min(sdf, sdfSphere(p, vec3(-o2,.0,-o2), s));
 
     t.x *= 0.3;
     t.y *= 0.5;
@@ -123,23 +129,19 @@ float sdRotatingTorus(vec3 pos, vec2 t, float r /*rotation dir*/){
     p = pos; p.z += o;
     p.xz *= rot2D(radians(90.));
     p.xy *= rot2D(radians(u_time * -10.0));
-    sdf = min(sdf, sdHexPrism(p, t2));
     sdf = min(sdf, sdStarBox(p, t));
 
     p = pos; p.z -= o;
     p.zx *= rot2D(radians(90.));
     p.xy *= rot2D(radians(u_time * -10.0));
-    sdf = min(sdf, sdHexPrism(p, t2));
     sdf = min(sdf, sdStarBox(p, t));
 
     p = pos; p.x += o;
     p.xy *= rot2D(radians(u_time * -10.0));
-    sdf = min(sdf, sdHexPrism(p, t2));
     sdf = min(sdf, sdStarBox(p, t));
 
     p = pos; p.x -= o;
     p.xy *= rot2D(radians(u_time * 10.0));
-    sdf = min(sdf, sdHexPrism(p, t2));
     sdf = min(sdf, sdStarBox(p, t));
 
     return sdf;
@@ -264,9 +266,11 @@ void main(){
 
     vec3 ambient = sphereColor * 0.5;
     float outline = float(j) * float(j) * 0.0001;
-    color = (ambient + diffuse * 0.3) * (1.0 - depth) - outline;
+    color = (ambient + diffuse * 0.3) * (1.0 - depth) + outline;
     // color *= exp( -0.1*t ); // fog 
     gl_FragColor = vec4(color, 1.0);
+
+    vec3 bg = vec3(1);
     if (m_dist > maxDist || m_dist > epsilon * 10.)
-        gl_FragColor = vec4(0,0,0,1);
+        gl_FragColor = vec4(bg,1);
 }
