@@ -16,6 +16,18 @@ const vec3 lightDir = normalize(vec3(1.2, 1, -1.1));
 const vec3 lightColor = vec3(1.0,0.9,0.8);
 const vec3 ambientColor = vec3(0.19, 0.28, 0.37);
 
+#define PAL1 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.33,0.67)
+#define PAL2 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.10,0.20) 
+#define PAL3 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.3,0.20,0.20)
+#define PAL4 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,0.5),vec3(0.8,0.90,0.30)
+#define PAL5 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,0.7,0.4),vec3(0.0,0.15,0.20)
+#define PAL6 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(2.0,1.0,0.0),vec3(0.5,0.20,0.25)
+#define PAL7 vec3(0.8,0.5,0.4),vec3(0.2,0.4,0.2),vec3(2.0,1.0,1.0),vec3(0.0,0.25,0.25)
+
+vec3 palette(float t,vec3 a,vec3 b,vec3 c,vec3 d )
+{
+    return a + b*cos( 6.283185*(c*t+d) );
+}
 
 vec3 hash33(vec3 p3)
 {
@@ -43,12 +55,6 @@ float sdfSphere(vec3 pos, vec3 center, float s)
   return length(pos - center) - s;
 }
 
-float sdfBox(vec3 pos, vec3 box)
-{
-  vec3 q = abs(pos) - box;
-  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0) - .00;
-}
-
 float sdTorus( vec3 p, vec2 t )
 {
   vec2 q = vec2(length(p.xz)-t.x,p.y);
@@ -68,6 +74,30 @@ mat2 rot2D(float angle)
     return mat2(c, s, -s, c);
 }
 
+float sdHexPrism( vec3 p, vec2 h )
+{
+  const vec3 k = vec3(-0.8660254, 0.5, 0.57735);
+  p = abs(p);
+  p.xy -= 2.0*min(dot(k.xy, p.xy), 0.0)*k.xy;
+  vec2 d = vec2(
+       length(p.xy-vec2(clamp(p.x,-k.z*h.x,k.z*h.x), h.x))*sign(p.y-h.x),
+       p.z-h.y );
+  return min(max(d.x,d.y),0.0) + length(max(d,0.0));
+}
+
+float sdBox( vec3 p, vec3 b )
+{
+  vec3 q = abs(p) - b;
+  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+}
+
+float sdStarBox( vec3 p, vec2 h )
+{
+    return min(
+        sdBox(p, h.xxy), 
+        sdBox(vec3(p.xy * rot2D(radians(45.)), p.z), h.xxy));
+}
+
 float sdRotatingTorus(vec3 pos, vec2 t, float r /*rotation dir*/){
     float sdf = 1000.;
     vec3 center = vec3(0,0.0,0);
@@ -77,31 +107,40 @@ float sdRotatingTorus(vec3 pos, vec2 t, float r /*rotation dir*/){
 
     sdf = min(sdf, sdTorus(p, t));
     float o = t.x;
-    float s = 0.1;
+    float s = 0.09;
     sdf = min(sdf, sdfSphere(p, vec3(+o,.0,+0), s));
     sdf = min(sdf, sdfSphere(p, vec3(+0,.0,+o), s));
     sdf = min(sdf, sdfSphere(p, vec3(+0,.0,-o), s));
     sdf = min(sdf, sdfSphere(p, vec3(-o,.0,+0), s));
 
-    t.x *= s * 2.0;
+    t.x *= 0.3;
     t.y *= 0.5;
 
-    p = pos;
-    p.z += o;
-    p.xy *= rot2D(radians(90.));
-    sdf = min(sdf, sdTorus(p, t));
-    p = pos;
-    p.z -= o;
-    p.xy *= rot2D(radians(90.));
-    sdf = min(sdf, sdTorus(p, t));
-    p = pos;
-    p.x += o;
-    p.zy *= rot2D(radians(90.));
-    sdf = min(sdf, sdTorus(p, t));
-    p = pos;
-    p.x -= o;
-    p.zy *= rot2D(radians(90.));
-    sdf = min(sdf, sdTorus(p, t));
+    vec2 t2 = t;
+    t2.x *= 0.75;
+    t2.y *= 2.5;
+
+    p = pos; p.z += o;
+    p.xz *= rot2D(radians(90.));
+    p.xy *= rot2D(radians(u_time * -10.0));
+    sdf = min(sdf, sdHexPrism(p, t2));
+    sdf = min(sdf, sdStarBox(p, t));
+
+    p = pos; p.z -= o;
+    p.zx *= rot2D(radians(90.));
+    p.xy *= rot2D(radians(u_time * -10.0));
+    sdf = min(sdf, sdHexPrism(p, t2));
+    sdf = min(sdf, sdStarBox(p, t));
+
+    p = pos; p.x += o;
+    p.xy *= rot2D(radians(u_time * -10.0));
+    sdf = min(sdf, sdHexPrism(p, t2));
+    sdf = min(sdf, sdStarBox(p, t));
+
+    p = pos; p.x -= o;
+    p.xy *= rot2D(radians(u_time * 10.0));
+    sdf = min(sdf, sdHexPrism(p, t2));
+    sdf = min(sdf, sdStarBox(p, t));
 
     return sdf;
 }
@@ -218,8 +257,10 @@ void main(){
     vec3 N = calculateNormal(pos);
     float diffuse = max(dot(N, -rayDir), 0.0);
 
-    vec3 sphereColor = hash33(floor(pos) + time * 0.00002);
-    sphereColor = vec3(1.0);
+    vec3 rand = hash33(floor(pos));
+    vec3 sphereColor = rand;
+    sphereColor = palette(depth * 10., PAL2);
+    // sphereColor = vec3(1.0);
 
     vec3 ambient = sphereColor * 0.5;
     float outline = float(j) * float(j) * 0.0001;

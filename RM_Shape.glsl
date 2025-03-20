@@ -21,6 +21,12 @@ mat2 rot2D(float angle)
     return mat2(c, s, -s, c);
 }
 
+float opSmoothUnion( float d1, float d2, float k )
+{
+    float h = clamp( 0.5 + 0.5*(d2-d1)/k, 0.0, 1.0 );
+    return mix( d2, d1, h ) - k*h*(1.0-h);
+}
+
 float sdfSphere(vec3 pos, vec3 center, float s)
 {
   return length(pos - center) - s;
@@ -32,6 +38,30 @@ float sdTorus( vec3 p, vec2 t )
   return length(q)-t.y;
 }
 
+float sdHexPrism( vec3 p, vec2 h )
+{
+  const vec3 k = vec3(-0.8660254, 0.5, 0.57735);
+  p = abs(p);
+  p.xy -= 2.0*min(dot(k.xy, p.xy), 0.0)*k.xy;
+  vec2 d = vec2(
+       length(p.xy-vec2(clamp(p.x,-k.z*h.x,k.z*h.x), h.x))*sign(p.y-h.x),
+       p.z-h.y );
+  return min(max(d.x,d.y),0.0) + length(max(d,0.0));
+}
+
+float sdBox( vec3 p, vec3 b )
+{
+  vec3 q = abs(p) - b;
+  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+}
+
+float sdStarBox( vec3 p, vec2 h )
+{
+    return min(
+        sdBox(p, h.xxy), 
+        sdBox(vec3(p.xy * rot2D(radians(45.)), p.z), h.xxy));
+}
+
 float sdRotatingTorus(vec3 pos, vec2 t, float r /*rotation dir*/){
     float sdf = 1000.;
     vec3 center = vec3(0,0.0,0);
@@ -41,41 +71,43 @@ float sdRotatingTorus(vec3 pos, vec2 t, float r /*rotation dir*/){
 
     sdf = min(sdf, sdTorus(p, t));
     float o = t.x;
-    float s = 0.1;
+    float s = 0.09;
     sdf = min(sdf, sdfSphere(p, vec3(+o,.0,+0), s));
     sdf = min(sdf, sdfSphere(p, vec3(+0,.0,+o), s));
     sdf = min(sdf, sdfSphere(p, vec3(+0,.0,-o), s));
     sdf = min(sdf, sdfSphere(p, vec3(-o,.0,+0), s));
 
-    t.x *= s * 2.0;
+    t.x *= 0.3;
     t.y *= 0.5;
 
-    p = pos;
-    p.z += o;
-    p.xy *= rot2D(radians(90.));
-    sdf = min(sdf, sdTorus(p, t));
-    p = pos;
-    p.z -= o;
-    p.xy *= rot2D(radians(90.));
-    sdf = min(sdf, sdTorus(p, t));
-    p = pos;
-    p.x += o;
-    p.zy *= rot2D(radians(90.));
-    sdf = min(sdf, sdTorus(p, t));
-    p = pos;
-    p.x -= o;
-    p.zy *= rot2D(radians(90.));
-    sdf = min(sdf, sdTorus(p, t));
+    vec2 t2 = t;
+    t2.x *= 0.75;
+    t2.y *= 2.5;
+
+    p = pos; p.z += o;
+    p.xz *= rot2D(radians(90.));
+    p.xy *= rot2D(radians(u_time * -10.0));
+    sdf = min(sdf, sdHexPrism(p, t2));
+    sdf = min(sdf, sdStarBox(p, t));
+
+    p = pos; p.z -= o;
+    p.zx *= rot2D(radians(90.));
+    p.xy *= rot2D(radians(u_time * -10.0));
+    sdf = min(sdf, sdHexPrism(p, t2));
+    sdf = min(sdf, sdStarBox(p, t));
+
+    p = pos; p.x += o;
+    p.xy *= rot2D(radians(u_time * -10.0));
+    sdf = min(sdf, sdHexPrism(p, t2));
+    sdf = min(sdf, sdStarBox(p, t));
+
+    p = pos; p.x -= o;
+    p.xy *= rot2D(radians(u_time * 10.0));
+    sdf = min(sdf, sdHexPrism(p, t2));
+    sdf = min(sdf, sdStarBox(p, t));
 
     return sdf;
 }
-
-float opSmoothUnion( float d1, float d2, float k )
-{
-    float h = clamp( 0.5 + 0.5*(d2-d1)/k, 0.0, 1.0 );
-    return mix( d2, d1, h ) - k*h*(1.0-h);
-}
-
 
 float sdfMap(vec3 pos)
 {
