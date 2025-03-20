@@ -12,7 +12,7 @@ const int steps = 300;
 
 const vec3 lightDir = normalize(vec3(1, 1, 1));
 const vec3 gemColor = vec3(0.85, 0.11, 0.11);
-const int colorIndex = 7; // 0 is default unicolor
+const int colorIndex = 2; // 0 is default unicolor
 
 #define PAL1 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.33,0.67)
 #define PAL2 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.10,0.20) 

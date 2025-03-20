@@ -21,20 +21,18 @@ void main() {
     p *= 10.0;
 
     float dist = length(p);
-    dist += abs(0.01
-        * dot(p, vec2(0.,1.))
-        * dot(p, vec2(1.,0.))
-        * dot(p, (vec2(1.,1.)))
-        * dot(p, normalize(vec2(1.,-1.)))
-        // * dot(p, vec2(cos(radians(22.5)),sin(radians(22.5))))
-        // * dot(p, vec2(cos(radians(67.5)),sin(radians(67.5))))
-        // * dot(p, vec2(cos(radians(-22.5)),sin(radians(-22.5))))
-        // * dot(p, vec2(cos(radians(-67.5)),sin(radians(-67.5))))
-        );
     float offset = (uv.x * 5.0) - (uv.y * 5.0);
     float c = sin(dist + u_time + offset);
 
     vec3 color = vec3(c * palette(c*c + u_time * 0.1 + offset * 0.5, PAL1)); 
+
+    // color = vec3(color.x+color.y+color.z) / 3.0;
+    // float n = 255. * 255. * 255.;
+    // n /= color.r;
+    // n /= color.g;
+    // n /= color.b;
+    // n = 1./n;
+    // color = vec3(n);
 
     gl_FragColor = vec4(1.0 - color, 1.0);
 }
