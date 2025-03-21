@@ -85,6 +85,8 @@ const float circleWidth = 0.05 * scale;
 //     return den1;
 // }
 float sampleDensity(vec3 pos) {
+    pos.xy *= rot2D(u_time);
+    pos.zy *= rot2D(u_time);
     float lenSq = dot(pos, pos);
 
     if (lenSq < smallCircleSize * smallCircleSize)

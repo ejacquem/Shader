@@ -39,7 +39,7 @@ mat2 rot2D(float angle)
 }
 
 float sdfTerrain(vec3 pos){
-    float groundPos = sin(pos.x) + sin(pos.z);
+    float groundPos = (sin(pos.x) + sin(pos.z)) * 0.5;
     return pos.y - groundPos;
 }
 
