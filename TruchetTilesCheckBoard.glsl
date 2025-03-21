@@ -36,19 +36,23 @@ void main() {
         return;
     }
 
+    vec3 color = vec3(0);
+    vec2 ip = floor(uv);
+    // float dir = mod(ip.x + ip.y, 2.)*2. - 1.; // checkboard pattern
+    float dir = floor(mod(ip.x * 0.5 + ip.y * 0.5, 2.)); // staircase
+    color.g = dir;
+
     float c1 = 0.4;
     float c2 = 0.6;
 
-    float dir = (hash12(floor(uv)) < 0.5) ? -1.0 : 1.0;
-    pos.y *= dir;
+    float rand = (hash12(floor(uv)) < 0.5) ? -1.0 : 1.0;
+    pos.y *= rand;
     float dist1 = distance(pos, floor(pos));
     float dist2 = distance(pos, ceil(pos));
 
-    vec3 color = vec3(0);
     color += inBoundsf(dist1, 0.45, 0.55);
     color += inBoundsf(dist2, 0.45, 0.55);
 
-    color.x *= clamp(cos(atan(pos.y, pos.x)*12. + u_time*8.)*4. + 4.3, 0., 1.);
     // color += vec3(distance(uv, ceil(uv)));
 
     gl_FragColor = vec4(color, 1.0);

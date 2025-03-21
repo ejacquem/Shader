@@ -32,6 +32,24 @@ float sdfSphere(vec3 pos, vec3 center, float s)
   return length(pos - center) - s;
 }
 
+// https://www.shadertoy.com/view/MtSyRz
+const float ARROW_RAD = 0.025;
+vec2 ARROW_HEAD_SLOPE = normalize(vec2(1, 2));
+    
+const float ARROW_BODY_LENGTH = 0.3;
+const float ARROW_HEAD_LENGTH = 0.1;
+float sdArrow(vec3 p, vec3 d)
+{
+    float t = dot(p, d);
+    float n = length(p - t*d);
+    float dist = n - ARROW_RAD;
+    t += 0.5*ARROW_HEAD_LENGTH;
+    dist = max(dist, abs(t)-0.5*ARROW_BODY_LENGTH);
+    t -= 0.5*ARROW_BODY_LENGTH;
+    dist = min(dist, max(-t, dot(ARROW_HEAD_SLOPE, vec2(t-ARROW_HEAD_LENGTH, n))));
+    return dist;
+}
+
 float sdTorus( vec3 p, vec2 t )
 {
   vec2 q = vec2(length(p.xz)-t.x,p.y);
@@ -64,49 +82,60 @@ float sdStarBox( vec3 p, vec2 h )
 
 float sdRotatingTorus(vec3 pos, vec2 t, float r /*rotation dir*/){
     float sdf = 1000.;
-    vec3 center = vec3(0,0.0,0);
 
     vec3 p = pos;
     p.xz *= rot2D(radians(u_time * 10. * r));
 
-    sdf = min(sdf, sdTorus(p, t));
+    sdf = min(sdf, sdTorus(p, t * vec2(1,0.2)));
+    // sdf = min(sdf, sdTorus(p + vec3(0), t * vec2(1.2,.25)));
+    // sdf = min(sdf, sdTorus(p + vec3(0), t * vec2(0.8,.25)));
+    // sdf = min(sdf, sdTorus(p + vec3(0,0.1,0), t * vec2(1.0,.25)));
+    // sdf = min(sdf, sdTorus(p + vec3(0,-0.1,0), t * vec2(1.0,.25)));
     float o = t.x;
     float o2 = t.x / 1.4142;
     float s = 0.09;
+    p = abs(p); // mirror negative space on 3 axis
     sdf = min(sdf, sdfSphere(p, vec3(+o,.0,+0), s));
     sdf = min(sdf, sdfSphere(p, vec3(+0,.0,+o), s));
-    sdf = min(sdf, sdfSphere(p, vec3(+0,.0,-o), s));
-    sdf = min(sdf, sdfSphere(p, vec3(-o,.0,+0), s));
+    // sdf = min(sdf, sdfSphere(p, vec3(+0,.0,-o), s));
+    // sdf = min(sdf, sdfSphere(p, vec3(-o,.0,+0), s));
 
     sdf = min(sdf, sdfSphere(p, vec3(+o2,.0,+o2), s));
-    sdf = min(sdf, sdfSphere(p, vec3(+o2,.0,-o2), s));
-    sdf = min(sdf, sdfSphere(p, vec3(-o2,.0,+o2), s));
-    sdf = min(sdf, sdfSphere(p, vec3(-o2,.0,-o2), s));
+    // sdf = min(sdf, sdfSphere(p, vec3(+o2,.0,-o2), s));
+    // sdf = min(sdf, sdfSphere(p, vec3(-o2,.0,+o2), s));
+    // sdf = min(sdf, sdfSphere(p, vec3(-o2,.0,-o2), s));
 
     t.x *= 0.3;
     t.y *= 0.5;
 
-    vec2 t2 = t;
-    t2.x *= 0.75;
-    t2.y *= 2.5;
+    mat2 rotTime = rot2D(radians(u_time * -10.0));
+    mat2 rot90 = rot2D(radians(90.));
 
-    p = pos; p.z += o;
-    p.xz *= rot2D(radians(90.));
-    p.xy *= rot2D(radians(u_time * -10.0));
+    // stars ------------------
+    // p = (pos); p.z += o;
+    // p.xz *= rot90;
+    // p.xy *= rotTime;
+    // sdf = min(sdf, sdStarBox(p, t));
+
+    p = pos; p.xz = abs(pos.xz); p.z -= o;
+    p.zx *= rot90;
+    p.xy *= rotTime;
     sdf = min(sdf, sdStarBox(p, t));
 
-    p = pos; p.z -= o;
-    p.zx *= rot2D(radians(90.));
-    p.xy *= rot2D(radians(u_time * -10.0));
+    // p = pos; p.x += o;
+    // p.xy *= rotTime;
+    // sdf = min(sdf, sdStarBox(p, t));
+
+    p = pos; p.xz = abs(pos.xz);; p.x -= o;
+    p.yx *= rotTime;
     sdf = min(sdf, sdStarBox(p, t));
 
-    p = pos; p.x += o;
-    p.xy *= rot2D(radians(u_time * -10.0));
-    sdf = min(sdf, sdStarBox(p, t));
-
-    p = pos; p.x -= o;
-    p.xy *= rot2D(radians(u_time * 10.0));
-    sdf = min(sdf, sdStarBox(p, t));
+    //arrow
+    p = pos;
+    sdf = min(sdf, sdArrow(p - vec3(0,0,o), vec3(-1,0,0)));
+    sdf = min(sdf, sdArrow(p - vec3(o,0,0), vec3(0,0,1)));
+    sdf = min(sdf, sdArrow(p - vec3(0,0,-o), vec3(1,0,0)));
+    sdf = min(sdf, sdArrow(p - vec3(-o,0,0), vec3(0,0,-1)));
 
     return sdf;
 }
