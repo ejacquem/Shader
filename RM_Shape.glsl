@@ -80,13 +80,28 @@ float sdStarBox( vec3 p, vec2 h )
         sdBox(vec3(p.xy * rot2D(radians(45.)), p.z), h.xxy));
 }
 
+mat2 r2(float th){ vec2 a = sin(vec2(1.5707963, 0) + th); return mat2(a, -a.y, a.x); }
+float Mobius(vec3 p){
+    const float toroidRadius = 0.5; // The object's disc radius.
+    float polRot = floor(4.)/4.; // Poloidal rotations.
+    float a = atan(p.z, p.x);
+    
+    p.xz *= r2(a);
+    p.x -= toroidRadius;
+    p.xy *= r2(a*polRot + u_time * 0.5);  // Twisting about the poloidal direction (controlled by "polRot) as we sweep.
+    
+    p = abs(abs(p) - .10); // Change this to "p = abs(p)," and you'll see what it does.
+    return sdfSphere(p, vec3(0), 0.10);
+}
+
 float sdRotatingTorus(vec3 pos, vec2 t){
+    return Mobius(pos);
     float sdf = 1000.;
     float r = 1.0;
     vec3 p = pos;
 
-
     p.xz *= rot2D(radians(u_time * 10. * r));
+
     sdf = min(sdf, sdfSphere(p, vec3(0), 0.1));
 
     // sdf = min(sdf, sdTorus(p, t * vec2(1,0.2)));

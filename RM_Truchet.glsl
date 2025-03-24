@@ -11,7 +11,7 @@ const float maxDist = 50.;
 const float epsilon = 0.0005;
 // const vec4 bgColor = vec4(0.14, 0.59, 0.73, 1.0);
 const vec4 bgColor = vec4(1.0);
-const int steps = 100;
+const int steps = 200;
 const vec3 lightDir = normalize(vec3(1.2, 1, -1.1));
 const vec3 lightColor = vec3(1.0,0.9,0.8);
 
@@ -102,7 +102,7 @@ float sdStarBox( vec3 p, vec2 h )
 // https://www.shadertoy.com/view/MtSyRz
 const float ARROW_RAD = 0.025;
 vec2 ARROW_HEAD_SLOPE = normalize(vec2(1, 2));
-    
+
 const float ARROW_BODY_LENGTH = 0.3;
 const float ARROW_HEAD_LENGTH = 0.1;
 float sdArrow(vec3 p, vec3 d)
@@ -117,53 +117,61 @@ float sdArrow(vec3 p, vec3 d)
     return dist;
 }
 
+mat2 r2(float th){ vec2 a = sin(vec2(1.5707963, 0) + th); return mat2(a, -a.y, a.x); }
+float Mobius(vec3 p){
+    const float toroidRadius = 0.5; // The object's disc radius.
+    float polRot = floor(3. * 4.0)/4.; // Poloidal rotations.
+    float a = atan(p.z, p.x);
+
+    p.xz *= r2(a);
+    p.x -= toroidRadius;
+    p.xy *= r2(a*polRot - u_time * 1.5);  // Twisting about the poloidal direction (controlled by "polRot) as we sweep.
+
+    p = abs(abs(p) - .07); // Change this to "p = abs(p)," and you'll see what it does.
+    return sdfSphere(p, vec3(0), 0.07);
+}
+
+vec2 objId;
+
 float sdRotatingTorus(vec3 pos, vec2 t){
-    float sdf = 1000.;
     float r = 1.0;
     vec3 p = pos;
+    float sdfS, sdfT;
+    sdfS = sdfT = 1000.;
 
     p.xz *= rot2D(radians(u_time * 10. * r));
 
+    sdfT = Mobius(pos);
+
     // sdf = min(sdf, sdTorus(p, t * vec2(1,0.2)));
-    sdf = min(sdf, sdTorus(p + vec3(0), t * vec2(1.2,.25)));
-    sdf = min(sdf, sdTorus(p + vec3(0), t * vec2(0.8,.25)));
-    sdf = min(sdf, sdTorus(p + vec3(0,0.1,0), t * vec2(1.0,.25)));
-    sdf = min(sdf, sdTorus(p + vec3(0,-0.1,0), t * vec2(1.0,.25)));
+    // sdfT = min(sdfT, sdTorus(p + vec3(0), t * vec2(1.2,.25)));
+    // sdfT = min(sdfT, sdTorus(p + vec3(0), t * vec2(0.8,.25)));
+    // sdfT = min(sdfT, sdTorus(p + vec3(0,0.1,0), t * vec2(1.0,.25)));
+    // sdfT = min(sdfT, sdTorus(p + vec3(0,-0.1,0), t * vec2(1.0,.25)));
     float o = t.x;
-    float o2 = t.x / 1.4142;
-    float s = 0.08;
+    float s = 0.05;
     p = abs(p); // mirror negative space on 3 axis
-    sdf = min(sdf, sdfSphere(p, vec3(+o,.0,+0), s));
-    sdf = min(sdf, sdfSphere(p, vec3(+0,.0,+o), s));
-    sdf = min(sdf, sdfSphere(p, vec3(+o2,.0,+o2), s));
+    sdfS = min(sdfS, sdfSphere(p, vec3(+o,.0,+0), s));
+    sdfS = min(sdfS, sdfSphere(p, vec3(+0,.0,+o), s));
+    sdfS = min(sdfS, sdfSphere(p, vec3(+o*.7071,.0,+o*.7071), s));
 
     t.x *= 0.3;
     t.y *= 0.5;
 
-    mat2 rotTime = rot2D(radians(u_time * -10.0));
-    mat2 rot90 = rot2D(radians(90.));
-
-    // stars ------------------
-    // p = pos; p.xz = abs(pos.xz); p.z -= o;
-    // p.zx *= rot90;
-    // p.xy *= rotTime;
-    // sdf = min(sdf, sdStarBox(p, t));
-
-    // p = pos; p.xz = abs(pos.xz);; p.x -= o;
-    // p.yx *= rotTime;
-    // sdf = min(sdf, sdStarBox(p, t));
+    // mat2 rotTime = rot2D(radians(u_time * -10.0));
+    // mat2 rot90 = rot2D(radians(90.));
 
     // Torus ---------------------
 
-    t.x *= 0.65;
-    t.y *= 1.1;
-    p = pos; p.xz = abs(pos.xz);; p.x -= o;
-    p.zy *= rot90;
-    sdf = min(sdf, sdTorus(p, t));
+    // t.x *= 0.65;
+    // t.y *= 1.1;
+    // p = pos; p.xz = abs(pos.xz);; p.x -= o;
+    // p.zy *= rot90;
+    // sdfT = min(sdfT, sdTorus(p, t));
 
-    p = pos; p.xz = abs(pos.xz);; p.z -= o;
-    p.xy *= rot90;
-    sdf = min(sdf, sdTorus(p, t));
+    // p = pos; p.xz = abs(pos.xz);; p.z -= o;
+    // p.xy *= rot90;
+    // sdfT = min(sdfT, sdTorus(p, t));
 
     //arrow
     // p = pos;
@@ -173,7 +181,10 @@ float sdRotatingTorus(vec3 pos, vec2 t){
     // sdf = min(sdf, sdArrow(p - vec3(0,0,-o), vec3(1,0,0)));
     // sdf = min(sdf, sdArrow(p - vec3(-o,0,0), vec3(0,0,-1)));
 
-    return sdf;
+    objId[0] = min(sdfS, objId[0]);
+    objId[1] = min(sdfT, objId[1]);
+
+    return min(sdfS, sdfT);
 }
 
 float sdfMap(vec3 pos)
@@ -196,6 +207,9 @@ float sdfMap(vec3 pos)
     float d = 0.5; // circle offset
     float s = 0.5; // circle size
     float w = 0.05;// circle width
+
+    objId[0] = maxDist;
+    objId[1] = maxDist;
 
     p = mpos + vec3(d,0,d);
     sdf = min(sdf, sdRotatingTorus(p, vec2(s, w)));
@@ -244,6 +258,17 @@ vec3 arrowColor(vec3 pos)
     return vec3(0,0,1);
 }
 
+vec3 sdfColor(vec3 pos){
+    if (objId[0] < objId[1]){
+        // pos.xz *= rot2D(u_time);
+        // pos.xy *= rot2D(u_time);
+        return palette(hash13(floor(pos)), PAL1);
+    }else
+    {
+        return vec3(1);
+    }
+}
+
 float diffuse(vec3 normal, vec3 lightDir){
     return max(dot(normal, lightDir), 0.0);
 }
@@ -255,24 +280,10 @@ float specular(vec3 rayDir, vec3 normal, vec3 lightDir, float po){
     return spec;
 }
 
-void main(){
-    vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
-    vec2 mx = (u_mouse.xy * 2.0 - u_resolution.xy) / u_resolution.y;
-
-    vec3 rayOrigin = vec3(u_time * 0.5,0,1.0);
-    vec3 rayDir = normalize(vec3(uv, 0.5));
-
-    mx *= 4.0;
-    // rayOrigin.yz *= rot2D(mx.y);
-    rayDir.yz *= rot2D(mx.y);
-
-    // rayOrigin.xz *= rot2D(mx.x);
-    rayDir.xz *= rot2D(mx.x);
-
+vec4 raymarch(vec3 rayOrigin, vec3 rayDir){
     float m_dist = maxDist;
     float t = 0.0; // total dist
     float prev_t = t;
-    vec3 color;
     vec3 pos = vec3(+0);
     vec3 startPos = rayOrigin;
     int j = 0;
@@ -294,16 +305,37 @@ void main(){
 
         prev_t = t;
         t += m_dist;
-        if (t > max_t){
-            startPos = startPos + rayDir * (max_t + 0.001);
-            max_t = gridIntersectionDistance(startPos, rayDir);
-            t = 0.0;
-        }
+        // if (t > max_t){
+        //     startPos = startPos + rayDir * (max_t + 0.001);
+        //     max_t = gridIntersectionDistance(startPos, rayDir);
+        //     t = 0.0;
+        // }
         j++;
     }
+    return vec4(pos, float(j));
+}
+
+void main(){
+    vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
+    vec2 mx = (u_mouse.xy * 2.0 - u_resolution.xy) / u_resolution.y;
+
+    vec3 rayOrigin = vec3(0,0,0);
+    vec3 rayDir = normalize(vec3(uv, 0.9));
+
+    mx *= 4.0;
+    // rayOrigin.yz *= rot2D(mx.y);
+    rayDir.yz *= rot2D(mx.y);
+
+    // rayOrigin.xz *= rot2D(mx.x);
+    rayDir.xz *= rot2D(mx.x);
+
+    vec4 result = raymarch(rayOrigin, rayDir);
+    vec3 pos = result.xyz;
+    float j = result.w;
+
     // float diffuse = calculateDiffuse(pos);
     float dist = distance(pos, rayOrigin);
-    float depth = 1.0 - (dist / (maxDist*0.1));
+    float depth = 1.0 - (dist / (maxDist*0.1)) * 0.7;
     vec3 N = calculateNormal(pos);
     float diff, spec;
     diff = diffuse(N, lightDir) * 0.4;
@@ -312,18 +344,19 @@ void main(){
 
     // vec3 rand = hash33(floor(pos));
     // vec3 sphereColor = rand;
-    vec3 sphereColor = palette(depth * 2.0, PAL2);
+    // vec3 sphereColor = palette(depth * 1.0, PAL2);
+    vec3 sphereColor = sdfColor(pos);
     // sphereColor = arrowColor(pos);
-    // sphereColor = vec3(1.0);
+    // sphereColor = vec3(0.0);
 
     vec3 ambient = sphereColor * ambientColor;
-    float outline = float(j) * float(j) * 0.0001;
-    color = (ambient + diff + spec) * (depth);
-    // color = vec3(outline);
+    float outline = j * 0.005;
+    vec3 color = (ambient + diff + spec) + outline;
+    // color = vec3(1.0 - outline);
     // color *= exp( -0.1*t ); // fog 
     gl_FragColor = vec4(color, 1.0);
 
-    vec3 bg = vec3(0);
-    if (m_dist > maxDist || m_dist > epsilon * 10.)
-        gl_FragColor = vec4(bg,1);
+    // vec3 bg = vec3(1);
+    // if (dist > maxDist)
+    //     gl_FragColor = vec4(bg,1);
 }
