@@ -258,11 +258,31 @@ vec3 arrowColor(vec3 pos)
     return vec3(0,0,1);
 }
 
+vec3 closestAdjacentGridCell(vec3 p) {
+    vec3 offset = p - floor(p) - 0.5; // Offset from center
+
+    // Determine the dominant axis
+    vec3 stepDir = vec3(0.0);
+    if (abs(offset.x) > abs(offset.y) && abs(offset.x) > abs(offset.z))
+        stepDir.x = sign(offset.x);
+    else if (abs(offset.y) > abs(offset.x) && abs(offset.y) > abs(offset.z))
+        stepDir.y = sign(offset.y);
+    else
+        stepDir.z = sign(offset.z);
+
+    return p + stepDir; // Move to adjacent grid cell
+}
+
+
 vec3 sdfColor(vec3 pos){
     if (objId[0] < objId[1]){
-        // pos.xz *= rot2D(u_time);
-        // pos.xy *= rot2D(u_time);
-        return palette(hash13(floor(pos)), PAL1);
+        vec3 gridColor = palette(hash13(floor(pos)), PAL1);
+        // return gridColor;
+        vec3 closestColor = palette(hash13(floor(closestAdjacentGridCell(pos))), PAL1);
+        vec3 offset = abs(pos - floor(pos) - 0.5) * 2.0;
+        float d = 1.0 - max(max(offset.x, offset.y), offset.z);
+        return mix(gridColor, closestColor, d);
+        // return hash33(floor(pos));
     }else
     {
         return vec3(1);
