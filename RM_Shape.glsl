@@ -6,6 +6,10 @@ uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
 
+#define PI05 1.570796326794897
+#define PI	3.141592653589793
+#define PI2 6.283185307179586
+
 const float maxDist = 100.;
 const float epsilon = 0.001;
 const vec4 bgColor = vec4(0.14, 0.59, 0.73, 1.0);
@@ -27,9 +31,9 @@ float opSmoothUnion( float d1, float d2, float k )
     return mix( d2, d1, h ) - k*h*(1.0-h);
 }
 
-float sdfSphere(vec3 pos, vec3 center, float s)
+float sdfSphere(vec3 pos, float s)
 {
-  return length(pos - center) - s;
+  return length(pos) - s;
 }
 
 // https://www.shadertoy.com/view/MtSyRz
@@ -91,18 +95,34 @@ float Mobius(vec3 p){
     p.xy *= r2(a*polRot + u_time * 0.5);  // Twisting about the poloidal direction (controlled by "polRot) as we sweep.
     
     p = abs(abs(p) - .10); // Change this to "p = abs(p)," and you'll see what it does.
-    return sdfSphere(p, vec3(0), 0.10);
+    return sdfSphere(p, 0.10);
+}
+
+const float toroidRadius = 0.5; // The object's disc radius.
+const float polRot = floor(3. * 4.0)/4.; // Poloidal rotations.
+const float ballnb = 5.0 * 4.0;
+float sdfsphereTorus(vec3 p){
+    float a = atan(p.z, p.x);
+    float ia = (floor(ballnb*a/PI2) + .5)/ballnb*PI2; 
+
+    p.xz *= rot2D(ia);
+    p.x -= 0.5;
+
+    // p.y += sin((ia * 8.0)) * 0.02;
+
+    p.xz = abs(p.xz);
+    return sdfSphere(p, 0.05);
 }
 
 float sdRotatingTorus(vec3 pos, vec2 t){
-    return Mobius(pos);
+    // return Mobius(pos);
     float sdf = 1000.;
     float r = 1.0;
     vec3 p = pos;
 
     p.xz *= rot2D(radians(u_time * 10. * r));
 
-    sdf = min(sdf, sdfSphere(p, vec3(0), 0.1));
+    sdf = min(sdf, sdfSphere(p, 0.1));
 
     // sdf = min(sdf, sdTorus(p, t * vec2(1,0.2)));
     sdf = min(sdf, sdTorus(p + vec3(0), t * vec2(1.2,.25)));
@@ -112,10 +132,13 @@ float sdRotatingTorus(vec3 pos, vec2 t){
     float o = t.x;
     float o2 = t.x / 1.4142;
     float s = 0.08;
-    p = abs(p); // mirror negative space on 3 axis
-    sdf = min(sdf, sdfSphere(p, vec3(+o,.0,+0), s));
-    sdf = min(sdf, sdfSphere(p, vec3(+0,.0,+o), s));
-    sdf = min(sdf, sdfSphere(p, vec3(+o2,.0,+o2), s));
+    // p = abs(p); // mirror negative space on 3 axis
+    // sdf = min(sdf, sdfSphere(p, vec3(+o,.0,+0), s));
+    // sdf = min(sdf, sdfSphere(p, vec3(+0,.0,+o), s));
+    // sdf = min(sdf, sdfSphere(p, vec3(+o2,.0,+o2), s));
+
+    // p.xz *= ;
+    sdf = sdfsphereTorus(p);
 
     t.x *= 0.3;
     t.y *= 0.5;

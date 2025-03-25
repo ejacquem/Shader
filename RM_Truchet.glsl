@@ -7,8 +7,12 @@ uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
 
+#define PI05 1.570796326794897
+#define PI	3.141592653589793
+#define PI2 6.283185307179586
+
 const float maxDist = 50.;
-const float epsilon = 0.0005;
+const float epsilon = 0.001;
 // const vec4 bgColor = vec4(0.14, 0.59, 0.73, 1.0);
 const vec4 bgColor = vec4(1.0);
 const int steps = 200;
@@ -51,9 +55,9 @@ float hash12(vec2 p)
     return fract((p3.x + p3.y) * p3.z);
 }
 
-float sdfSphere(vec3 pos, vec3 center, float s)
+float sdfSphere(vec3 pos, float s)
 {
-  return length(pos - center) - s;
+  return length(pos) - s;
 }
 
 float sdTorus( vec3 p, vec2 t )
@@ -70,33 +74,17 @@ float opSmoothUnion( float d1, float d2, float k )
 
 mat2 rot2D(float angle)
 {
-    float c = cos(angle);
-    float s = sin(angle);
-    return mat2(c, s, -s, c);
-}
-
-float sdHexPrism( vec3 p, vec2 h )
-{
-  const vec3 k = vec3(-0.8660254, 0.5, 0.57735);
-  p = abs(p);
-  p.xy -= 2.0*min(dot(k.xy, p.xy), 0.0)*k.xy;
-  vec2 d = vec2(
-       length(p.xy-vec2(clamp(p.x,-k.z*h.x,k.z*h.x), h.x))*sign(p.y-h.x),
-       p.z-h.y );
-  return min(max(d.x,d.y),0.0) + length(max(d,0.0));
+    // float c = cos(angle);
+    // float s = sin(angle);
+    // return mat2(c, s, -s, c);
+    vec2 a = sin(vec2(1.5707963, 0) + angle); 
+    return mat2(a, -a.y, a.x);
 }
 
 float sdBox( vec3 p, vec3 b )
 {
   vec3 q = abs(p) - b;
   return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
-}
-
-float sdStarBox( vec3 p, vec2 h )
-{
-    return min(
-        sdBox(p, h.xxy), 
-        sdBox(vec3(p.xy * rot2D(radians(45.)), p.z), h.xxy));
 }
 
 // https://www.shadertoy.com/view/MtSyRz
@@ -117,74 +105,46 @@ float sdArrow(vec3 p, vec3 d)
     return dist;
 }
 
-mat2 r2(float th){ vec2 a = sin(vec2(1.5707963, 0) + th); return mat2(a, -a.y, a.x); }
+const float toroidRadius = 0.5; // The object's disc radius.
+const float polRot = floor(3. * 4.0)/4.; // Poloidal rotations.
+const float ballnb = 5.0 * 4.0;
 float Mobius(vec3 p){
-    const float toroidRadius = 0.5; // The object's disc radius.
-    float polRot = floor(3. * 4.0)/4.; // Poloidal rotations.
     float a = atan(p.z, p.x);
 
-    p.xz *= r2(a);
+    p.xz *= rot2D(a);
     p.x -= toroidRadius;
-    p.xy *= r2(a*polRot - u_time * 1.5);  // Twisting about the poloidal direction (controlled by "polRot) as we sweep.
+    p.xy *= rot2D(a*polRot + u_time);
 
-    p = abs(abs(p) - .07); // Change this to "p = abs(p)," and you'll see what it does.
-    return sdfSphere(p, vec3(0), 0.07);
+    p = abs(abs(p) - .07);
+    return sdfSphere(p, .071);
+}
+
+float sdfsphereTorus(vec3 p){
+    float a = atan(p.z, p.x);
+    float ia = (floor(ballnb*a/PI2) + .5)/ballnb*PI2; 
+
+    p.xz *= rot2D(ia);
+    p.x -= toroidRadius;
+
+    return sdfSphere(abs(p), 0.05);
 }
 
 vec2 objId;
 
-float sdRotatingTorus(vec3 pos, vec2 t){
+float sdRotatingTorus(vec3 pos){
     float r = 1.0;
     vec3 p = pos;
     float sdfS, sdfT;
-    sdfS = sdfT = 1000.;
 
     p.xz *= rot2D(radians(u_time * 10. * r));
 
     sdfT = Mobius(pos);
-
-    // sdf = min(sdf, sdTorus(p, t * vec2(1,0.2)));
-    // sdfT = min(sdfT, sdTorus(p + vec3(0), t * vec2(1.2,.25)));
-    // sdfT = min(sdfT, sdTorus(p + vec3(0), t * vec2(0.8,.25)));
-    // sdfT = min(sdfT, sdTorus(p + vec3(0,0.1,0), t * vec2(1.0,.25)));
-    // sdfT = min(sdfT, sdTorus(p + vec3(0,-0.1,0), t * vec2(1.0,.25)));
-    float o = t.x;
-    float s = 0.05;
-    p = abs(p); // mirror negative space on 3 axis
-    sdfS = min(sdfS, sdfSphere(p, vec3(+o,.0,+0), s));
-    sdfS = min(sdfS, sdfSphere(p, vec3(+0,.0,+o), s));
-    sdfS = min(sdfS, sdfSphere(p, vec3(+o*.7071,.0,+o*.7071), s));
-
-    t.x *= 0.3;
-    t.y *= 0.5;
-
-    // mat2 rotTime = rot2D(radians(u_time * -10.0));
-    // mat2 rot90 = rot2D(radians(90.));
-
-    // Torus ---------------------
-
-    // t.x *= 0.65;
-    // t.y *= 1.1;
-    // p = pos; p.xz = abs(pos.xz);; p.x -= o;
-    // p.zy *= rot90;
-    // sdfT = min(sdfT, sdTorus(p, t));
-
-    // p = pos; p.xz = abs(pos.xz);; p.z -= o;
-    // p.xy *= rot90;
-    // sdfT = min(sdfT, sdTorus(p, t));
-
-    //arrow
-    // p = pos;
-    // p.xy *= rot2D(radians(180. * float(r == 1.0)));
-    // sdf = min(sdf, sdArrow(p - vec3(0,0,o), vec3(-1,0,0)));
-    // sdf = min(sdf, sdArrow(p - vec3(o,0,0), vec3(0,0,1)));
-    // sdf = min(sdf, sdArrow(p - vec3(0,0,-o), vec3(1,0,0)));
-    // sdf = min(sdf, sdArrow(p - vec3(-o,0,0), vec3(0,0,-1)));
+    sdfS = sdfsphereTorus(p);
 
     objId[0] = min(sdfS, objId[0]);
     objId[1] = min(sdfT, objId[1]);
 
-    return min(sdfS, sdfT);
+    return opSmoothUnion(sdfS, sdfT, 0.00);
 }
 
 float sdfMap(vec3 pos)
@@ -193,34 +153,29 @@ float sdfMap(vec3 pos)
     vec3 ctr = floor(pos);
     // Alternating sign on each axis
     vec3 sn = sign(mod(ctr, 2.0) - 0.5);
-    pos.x *= sn.y;
-    pos.x *= sn.z;
-    pos.z *= sn.x;
-    pos.z *= sn.y;
-    pos.y *= sn.z;
-    pos.y *= sn.x;
+    pos.xz *= sn.y;
+    pos.xy *= sn.z;
+    pos.zy *= sn.x;
 
     vec3 mpos = fract(pos) - 0.5;
 
     vec3 p = mpos;
     float sdf = maxDist;
     float d = 0.5; // circle offset
-    float s = 0.5; // circle size
-    float w = 0.05;// circle width
 
     objId[0] = maxDist;
     objId[1] = maxDist;
 
     p = mpos + vec3(d,0,d);
-    sdf = min(sdf, sdRotatingTorus(p, vec2(s, w)));
+    sdf = min(sdf, sdRotatingTorus(p));
 
     p = mpos + vec3(0,d,-d);
     p.xy *= rot2D(radians(90.));
-    sdf = min(sdf, sdRotatingTorus(p, vec2(s, w)));
+    sdf = min(sdf, sdRotatingTorus(p));
 
     p = mpos + vec3(-d,-d,0);
     p.zy *= rot2D(radians(-90.));
-    sdf = min(sdf, sdRotatingTorus(p, vec2(s, w)));
+    sdf = min(sdf, sdRotatingTorus(p));
     
     return sdf;
 }
@@ -232,12 +187,6 @@ vec3 calculateNormal(vec3 pos)
 					  e.yyx*sdfMap( pos + e.yyx ) + 
 					  e.yxy*sdfMap( pos + e.yxy ) + 
 					  e.xxx*sdfMap( pos + e.xxx ) );
-}
-
-float calculateDiffuse(vec3 pos)
-{
-    float eps = 0.0001;
-    return clamp((sdfMap(pos+eps*lightDir)-sdfMap(pos))/eps,0.0,1.0);
 }
 
 float gridIntersectionDistance(vec3 rayOrigin, vec3 rayDir) {
@@ -258,35 +207,42 @@ vec3 arrowColor(vec3 pos)
     return vec3(0,0,1);
 }
 
-vec3 closestAdjacentGridCell(vec3 p) {
-    vec3 offset = p - floor(p) - 0.5; // Offset from center
+float trilinearInterpolation(vec3 p) {
+    vec3 gridPos = floor(p);
+    vec3 frac = p - gridPos;
 
-    // Determine the dominant axis
-    vec3 stepDir = vec3(0.0);
-    if (abs(offset.x) > abs(offset.y) && abs(offset.x) > abs(offset.z))
-        stepDir.x = sign(offset.x);
-    else if (abs(offset.y) > abs(offset.x) && abs(offset.y) > abs(offset.z))
-        stepDir.y = sign(offset.y);
-    else
-        stepDir.z = sign(offset.z);
+    // sample the 8 surrounding points
+    float c000 = hash13(gridPos + vec3(0,0,0));
+    float c100 = hash13(gridPos + vec3(1,0,0));
+    float c010 = hash13(gridPos + vec3(0,1,0));
+    float c110 = hash13(gridPos + vec3(1,1,0));
+    float c001 = hash13(gridPos + vec3(0,0,1));
+    float c101 = hash13(gridPos + vec3(1,0,1));
+    float c011 = hash13(gridPos + vec3(0,1,1));
+    float c111 = hash13(gridPos + vec3(1,1,1));
 
-    return p + stepDir; // Move to adjacent grid cell
+    float c00 = mix(c000, c100, frac.x);
+    float c01 = mix(c001, c101, frac.x);
+    float c10 = mix(c010, c110, frac.x);
+    float c11 = mix(c011, c111, frac.x);
+
+    float c0 = mix(c00, c10, frac.y);
+    float c1 = mix(c01, c11, frac.y);
+
+    return mix(c0, c1, frac.z);
 }
 
-
 vec3 sdfColor(vec3 pos){
-    if (objId[0] < objId[1]){
-        vec3 gridColor = palette(hash13(floor(pos)), PAL1);
-        // return gridColor;
-        vec3 closestColor = palette(hash13(floor(closestAdjacentGridCell(pos))), PAL1);
-        vec3 offset = abs(pos - floor(pos) - 0.5) * 2.0;
-        float d = 1.0 - max(max(offset.x, offset.y), offset.z);
-        return mix(gridColor, closestColor, d);
-        // return hash33(floor(pos));
-    }else
-    {
-        return vec3(1);
-    }
+    vec3 c, c1, c2;
+    c1 = palette(trilinearInterpolation(pos) * 2.0, PAL1);
+    c2 = vec3(1);
+    // float d = abs(objId[0] - objId[1]);
+    // c = mix(c1, c2, );
+    // return c;
+    if (objId[0] < objId[1])
+        return c1;
+    else
+        return c2;
 }
 
 float diffuse(vec3 normal, vec3 lightDir){
@@ -316,11 +272,11 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDir){
         m_dist = sdfMap(pos);
         // if(m_dist < -epsilon){ // Error detection
         //     gl_FragColor = vec4(vec3(abs(sin(u_time * 3.))),1);
-        //     return;
+        //     return vec4(pos, 0.);
         // }
         min_m_dist = min(min_m_dist, max(-0., m_dist));
 
-        if (m_dist < epsilon) 
+        if (m_dist < epsilon || m_dist > maxDist) 
             break;
 
         prev_t = t;
@@ -335,32 +291,39 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDir){
     return vec4(pos, float(j));
 }
 
+//https://www.shadertoy.com/view/3s3GDn
+float getGlow(float dist, float radius, float intensity){
+    return pow(radius/dist, intensity);
+}
+
+const float intensity = 1.3;
+const float radius = 0.015;
 void main(){
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
     vec2 mx = (u_mouse.xy * 2.0 - u_resolution.xy) / u_resolution.y;
 
     vec3 rayOrigin = vec3(0,0,0);
-    vec3 rayDir = normalize(vec3(uv, 0.9));
+    vec3 rayDir = normalize(vec3(uv, 0.99));
 
     mx *= 4.0;
     // rayOrigin.yz *= rot2D(mx.y);
     rayDir.yz *= rot2D(mx.y);
-
     // rayOrigin.xz *= rot2D(mx.x);
     rayDir.xz *= rot2D(mx.x);
 
     vec4 result = raymarch(rayOrigin, rayDir);
     vec3 pos = result.xyz;
     float j = result.w;
+    if (j == 0.0)
+        return;
 
-    // float diffuse = calculateDiffuse(pos);
     float dist = distance(pos, rayOrigin);
     float depth = 1.0 - (dist / (maxDist*0.1)) * 0.7;
+    vec3 vdepth = vec3(1,1,1) * depth;
     vec3 N = calculateNormal(pos);
     float diff, spec;
     diff = diffuse(N, lightDir) * 0.4;
-    // float spec = specular(rayDir, N, lightDir, 2.) * 0.3;
-    spec += specular(rayDir, N, lightDir, 16.) * 0.5;
+    spec = specular(rayDir, N, lightDir, 16.) * 0.5;
 
     // vec3 rand = hash33(floor(pos));
     // vec3 sphereColor = rand;
@@ -370,8 +333,12 @@ void main(){
     // sphereColor = vec3(0.0);
 
     vec3 ambient = sphereColor * ambientColor;
-    float outline = j * 0.005;
-    vec3 color = (ambient + diff + spec) + outline;
+    float outline = j * 0.02;
+    // float glow = getGlow(objId[0], radius, intensity) * 0.01;
+    vec3 color = (ambient + diff + spec + outline) * vdepth;
+    if (sphereColor == vec3(1)){
+        color = (sphereColor) * vdepth;
+    }
     // color = vec3(1.0 - outline);
     // color *= exp( -0.1*t ); // fog 
     gl_FragColor = vec4(color, 1.0);
