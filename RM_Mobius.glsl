@@ -42,7 +42,7 @@ float Mobius(vec3 q){
     //// CONSTANTS ////
     const float toroidRadius = 1.25; // The object's disc radius.
     //const float ringWidth = .15; 
-    const float polRot = 4./4.; // Poloidal rotations.
+    const float polRot = 5./4.; // Poloidal rotations.
     const float ringNum = 32.; // Number of quantized objects embedded between the rings.
     
     
