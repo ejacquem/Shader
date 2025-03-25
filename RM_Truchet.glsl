@@ -6,11 +6,14 @@ uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
 
+
 #define PI05 1.570796326794897
 #define PI	3.141592653589793
 #define PI2 6.283185307179586
 
-const float maxDist = 8.;
+float time = u_time;
+
+const float maxDist = 10.;
 const float epsilon = 0.001;
 const vec4 bgColor = vec4(1.0);
 const int steps = 100;
@@ -64,7 +67,7 @@ const float ballnb = 5.0 * 4.0;
 float sdfMobius(vec3 p, float a){
     p.xz *= rot2D(a);
     p.x -= toroidRadius;
-    p.xy *= rot2D(a*polRot + u_time);
+    p.xy *= rot2D(a*polRot + time);
 
     p = abs(abs(p) - .06);
     return sdfSphere(p, .061);
@@ -86,7 +89,7 @@ float sdRotatingTorus(vec3 pos){
     vec3 p = pos;
     float sdfS, sdfT;
 
-    p.xz *= rot2D(radians(u_time * 10. * r));
+    p.xz *= rot2D(radians(time * 10. * r));
 
     float a = atan(p.z, p.x);
     sdfT = sdfMobius(p, a);
@@ -132,18 +135,9 @@ float sdfMap(vec3 pos)
     return sdf;
 }
 
-vec3 calculateNormal(vec3 pos)
-{
-    vec2 e = vec2(1.0,-1.0)*0.5773*0.001;
-    return normalize(e.xyy*sdfMap(pos + e.xyy) + 
-                     e.yyx*sdfMap(pos + e.yyx) + 
-                     e.yxy*sdfMap(pos + e.yxy) + 
-                     e.xxx*sdfMap(pos + e.xxx) );
-}
-
 float trilinearInterpolation(vec3 p) {
     vec3 gridPos = floor(p);
-    vec3 frac = p - gridPos;
+    vec3 frac = fract(p);
 
     // sample the 8 surrounding points
     float c000 = hash13(gridPos + vec3(0,0,0));
@@ -166,19 +160,9 @@ float trilinearInterpolation(vec3 p) {
     return mix(c0, c1, frac.z);
 }
 
-float diffuse(vec3 normal, vec3 lightDir){
-    return max(dot(normal, lightDir), 0.0);
+vec3 get3dColorGradient(vec3 pos){
+    return palette(trilinearInterpolation(pos + time * 0.2) * 2.0, PAL1);
 }
-
-float specular(vec3 rayDir, vec3 normal, vec3 lightDir, float po){
-    vec3 reflectDir = reflect(lightDir, normal);  
-
-    float spec = pow(max(dot(rayDir, reflectDir), 0.0), po);
-    return spec;
-}
-
-vec3 glow = vec3(0.0);
-float totMinDist = 0.0;
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDir){
     float m_dist = maxDist;
@@ -186,24 +170,14 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDir){
     vec3 pos = vec3(0);
     vec3 startPos = rayOrigin;
     int j = 0;
-    float prev_m_dist;
 
     for (int i = 0; i < steps; i++){
         pos = startPos + rayDir * t;
 
-        prev_m_dist = m_dist;
         m_dist = sdfMap(pos);
 
-        if(m_dist > prev_m_dist){
-            if (objId[0] < objId[1]){
-                // glow += pow(m_dist / t, .1) * 0.5;
-                // totMinDist += m_dist * t;
-                glow += exp(-m_dist * 200.0 * t) * .1 * palette(trilinearInterpolation(pos) * 2.0, PAL1);
-            }
-        }
-
         // if(m_dist < -epsilon){ // Error detection
-        //     gl_FragColor = vec4(vec3(abs(sin(u_time * 3.))),1);
+        //     gl_FragColor = vec4(vec3(abs(sin(time * 3.))),1);
         //     return vec4(pos, 0.);
         // }
 
@@ -213,21 +187,34 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDir){
         t += m_dist;
         j++;
     }
-    // glow = exp(-totMinDist * .00001) * .06;
     return vec4(pos, float(j));
 }
 
 vec3 sdfColor(vec3 pos){
     if (objId[0] < objId[1])
-        return palette(trilinearInterpolation(pos) * 2.0, PAL1);
+        return get3dColorGradient(pos);
     // else
     //     return railColor;
     vec3 c, c1, c2;
-    c1 = palette(trilinearInterpolation(pos) * 2.0, PAL1);
+    c1 = get3dColorGradient(pos);
     c2 = railColor;
     float d = abs(objId[0] - objId[1]);
     c = max(vec3(0),mix(c1, c2, d * 22.));
     return c;
+}
+
+//return the color of the scene
+vec3 truchetRaymarching(vec3 rayOrigin, vec3 rayDir){
+    vec4 result = raymarch(rayOrigin, rayDir);
+    vec3 pos = result.xyz;
+
+    float dist = distance(pos, rayOrigin);
+    float depth = 1.0 - (dist / (maxDist));
+
+    vec3 sphereColor = sdfColor(pos);
+
+    vec3 color = sphereColor * depth;
+    return color;
 }
 
 void main(){
@@ -243,24 +230,5 @@ void main(){
     // rayOrigin.xz *= rot2D(mx.x);
     rayDir.xz *= rot2D(mx.x);
 
-    vec4 result = raymarch(rayOrigin, rayDir);
-    vec3 pos = result.xyz;
-    float j = result.w;
-    if (j == 0.0)
-        return;
-
-    float dist = distance(pos, rayOrigin);
-    float depth = 1.0 - (dist / (maxDist));
-    // vec3 N = calculateNormal(pos);
-    // float diff, spec;
-    // diff = diffuse(N, lightDir) * 0.4;
-    // spec = specular(rayDir, N, lightDir, 16.) * 0.5;
-
-    vec3 sphereColor = sdfColor(pos);
-
-    vec3 color = sphereColor * depth + glow;
-    // if (sphereColor == railColor){
-    //     color = max(vec3(0), (sphereColor + diff + spec) * depth) + glow;
-    // }
-    gl_FragColor = vec4(color, 1.0);
+    gl_FragColor = vec4(truchetRaymarching(rayOrigin, rayDir), 1.0);
 }
