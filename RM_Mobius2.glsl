@@ -39,7 +39,7 @@ float smin(float a, float b , float s){
 mat2 r2(float th){ vec2 a = sin(vec2(1.5707963, 0) + th); return mat2(a, -a.y, a.x); }
 float Mobius(vec3 p){
     const float toroidRadius = 1.25; // The object's disc radius.
-    float polRot = floor(4.)/4.; // Poloidal rotations.
+    float polRot = 0.25; // Poloidal rotations.
     float a = atan(p.z, p.x);
     
     p.xz *= r2(a);
@@ -47,7 +47,7 @@ float Mobius(vec3 p){
     p.xy *= r2(a*polRot + u_time * 0.5);  // Twisting about the poloidal direction (controlled by "polRot) as we sweep.
     
     p = abs(abs(p) - .2); // Change this to "p = abs(p)," and you'll see what it does.
-    return sdfSphere(p, vec3(0), 0.25);
+    return sdfSphere(p, vec3(0), 0.21);
 }
 
 mat2 rot2D(float angle)

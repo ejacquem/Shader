@@ -6,6 +6,8 @@ uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
 
+float time = u_time;
+
 #define PI05 1.570796326794897
 #define PI	3.141592653589793
 #define PI2 6.283185307179586
@@ -97,86 +99,46 @@ float Mobius(vec3 p){
     p = abs(abs(p) - .10); // Change this to "p = abs(p)," and you'll see what it does.
     return sdfSphere(p, 0.10);
 }
-
+// Mobius equation from https://www.shadertoy.com/view/XldSDs
 const float toroidRadius = 0.5; // The object's disc radius.
-const float polRot = floor(3. * 4.0)/4.; // Poloidal rotations.
+const float polRot = 3.; // Poloidal rotations.
 const float ballnb = 5.0 * 4.0;
-float sdfsphereTorus(vec3 p){
-    float a = atan(p.z, p.x);
+float sdfMobius(vec3 p, float a){
+    p.xz *= rot2D(a);
+    p.x -= toroidRadius;
+    p.xy *= rot2D(a*polRot + time);
+
+    p = abs(abs(p) - .06);
+    return sdfSphere(p, .061);
+}
+
+float sdfSphereTorus(vec3 p, float a){
     float ia = (floor(ballnb*a/PI2) + .5)/ballnb*PI2; 
 
     p.xz *= rot2D(ia);
-    p.x -= 0.5;
+    p.x -= toroidRadius;
 
-    // p.y += sin((ia * 8.0)) * 0.02;
-
-    p.xz = abs(p.xz);
-    return sdfSphere(p, 0.05);
+    return sdfSphere(abs(p), 0.05);
 }
 
-float sdRotatingTorus(vec3 pos, vec2 t){
-    // return Mobius(pos);
-    float sdf = 1000.;
+vec2 objId;
+
+float sdRotatingTorus(vec3 pos){
     float r = 1.0;
+    pos.x *= 1.25;
     vec3 p = pos;
+    float sdfS, sdfT;
 
-    p.xz *= rot2D(radians(u_time * 10. * r));
+    // p.xz *= rot2D(radians(time * 10. * r));
 
-    sdf = min(sdf, sdfSphere(p, 0.1));
+    float a = atan(p.z, p.x);
+    sdfT = sdfMobius(p, a);
+    sdfS = sdfSphereTorus(p, a);
 
-    // sdf = min(sdf, sdTorus(p, t * vec2(1,0.2)));
-    sdf = min(sdf, sdTorus(p + vec3(0), t * vec2(1.2,.25)));
-    sdf = min(sdf, sdTorus(p + vec3(0), t * vec2(0.8,.25)));
-    sdf = min(sdf, sdTorus(p + vec3(0,0.1,0), t * vec2(1.0,.25)));
-    sdf = min(sdf, sdTorus(p + vec3(0,-0.1,0), t * vec2(1.0,.25)));
-    float o = t.x;
-    float o2 = t.x / 1.4142;
-    float s = 0.08;
-    // p = abs(p); // mirror negative space on 3 axis
-    // sdf = min(sdf, sdfSphere(p, vec3(+o,.0,+0), s));
-    // sdf = min(sdf, sdfSphere(p, vec3(+0,.0,+o), s));
-    // sdf = min(sdf, sdfSphere(p, vec3(+o2,.0,+o2), s));
+    objId[0] = min(sdfS, objId[0]);
+    objId[1] = min(sdfT, objId[1]);
 
-    // p.xz *= ;
-    sdf = sdfsphereTorus(p);
-
-    t.x *= 0.3;
-    t.y *= 0.5;
-
-    mat2 rotTime = rot2D(radians(u_time * -10.0));
-    mat2 rot90 = rot2D(radians(90.));
-
-    // stars ------------------
-    // p = pos; p.xz = abs(pos.xz); p.z -= o;
-    // p.zx *= rot90;
-    // p.xy *= rotTime;
-    // sdf = min(sdf, sdStarBox(p, t));
-
-    // p = pos; p.xz = abs(pos.xz);; p.x -= o;
-    // p.yx *= rotTime;
-    // sdf = min(sdf, sdStarBox(p, t));
-
-    // Torus ---------------------
-
-    t.x *= 0.65;
-    t.y *= 1.1;
-    p = pos; p.xz = abs(pos.xz);; p.x -= o;
-    p.zy *= rot90;
-    sdf = min(sdf, sdTorus(p, t));
-
-    p = pos; p.xz = abs(pos.xz);; p.z -= o;
-    p.xy *= rot90;
-    sdf = min(sdf, sdTorus(p, t));
-
-    //arrow
-    // p = pos;
-    // p.xy *= rot2D(radians(180. * float(r == 1.0)));
-    // sdf = min(sdf, sdArrow(p - vec3(0,0,o), vec3(-1,0,0)));
-    // sdf = min(sdf, sdArrow(p - vec3(o,0,0), vec3(0,0,1)));
-    // sdf = min(sdf, sdArrow(p - vec3(0,0,-o), vec3(1,0,0)));
-    // sdf = min(sdf, sdArrow(p - vec3(-o,0,0), vec3(0,0,-1)));
-
-    return sdf;
+    return opSmoothUnion(sdfS, sdfT, 0.05);
 }
 
 float sdfMap(vec3 pos)
@@ -185,7 +147,7 @@ float sdfMap(vec3 pos)
 
     // pos.xy *= rot2D(radians(u_time * 100.));
 
-    sdf = sdRotatingTorus(pos, vec2(0.5, 0.05));
+    sdf = sdRotatingTorus(pos);
 
     return sdf;
 }

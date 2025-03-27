@@ -14,25 +14,31 @@ vec3 palette(float t,vec3 a,vec3 b,vec3 c,vec3 d )
     return a + b*cos( 6.283185*(c*t+d) );
 }
 
+vec2 vecDeg(float angle){
+    return vec2(cos(radians(angle)), sin(radians(angle)));
+}
+
 void main() {
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
 
-    vec2 p = fract(uv * 10.0) - 0.5;
-    p *= 10.0;
+    vec2 p = (fract(uv * 10.) - 0.5) * 10.;
+
+    float time = u_time;
 
     float dist = length(p);
-    float offset = (uv.x * 5.0) - (uv.y * 5.0);
-    float c = sin(dist + u_time + offset);
+    p = abs(p); // mirror x and y axis
+    dist += abs(0.01
+        * dot(p, vecDeg(0.))
+        * dot(p, vecDeg(-22.5))
+        * dot(p, vecDeg(-45.0))
+        * dot(p, vecDeg(-67.5))
+        * dot(p, vecDeg(-90.0))
+        * dot(p, vecDeg(45.)) // this one shouldn't be needed but creates cool decorations
+        );
+    float offset = (uv.x - uv.y) * 5.0;
+    float c = sin(dist + time + offset);
 
-    vec3 color = vec3(c * palette(c*c + u_time * 0.1 + offset * 0.5, PAL1)); 
-
-    // color = vec3(color.x+color.y+color.z) / 3.0;
-    // float n = 255. * 255. * 255.;
-    // n /= color.r;
-    // n /= color.g;
-    // n /= color.b;
-    // n = 1./n;
-    // color = vec3(n);
+    vec3 color = vec3(c * palette(c + time * 0.1 + offset * 0.5, PAL1)); 
 
     gl_FragColor = vec4(1.0 - color, 1.0);
 }

@@ -9,10 +9,17 @@ uniform float u_time;
 const float maxDist = 1000.;
 const float epsilon = 0.01;
 const int steps = 300;
-
+const vec3 bgColor = vec3(.05,0.0,.0);
 const vec3 lightDir = normalize(vec3(1, 1, 1));
 const vec3 gemColor = vec3(0.85, 0.11, 0.11);
-const int colorIndex = 2; // 0 is default unicolor
+
+#define GEM_TYPE          0   // 0 or 1
+const int colorIndex    = 2;   // 0 or 7, 0 is gemColor
+const int maxReflection = 10;
+const float rlCoef      = 0.95; // refraction loss coefficient
+const float cameraDist  = 10.;
+
+float time = u_time;
 
 #define PAL1 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.33,0.67)
 #define PAL2 vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.10,0.20) 
@@ -72,29 +79,21 @@ float sdfSphere(vec3 pos, float s)
   return length(pos) - s;
 }
 
-// return the given sdf cut by the plane
 float sdfPlaneCut(float sdf, vec3 p, vec3 n, float h)
 {
-  // n must be normalized
   return max(sdf, dot(p,n) + h);
 }
 
 #define N normalize
 
 float sdfCustomGem(vec3 p){
-    // return sdFacetedGem(p);
-
     p = abs(p);
     p.xz = abs(p.xz);
-    // d = sdfPlaneCut(d, p, vec3(-1, 0, 0), -0.0); 
-    // d = sdfPlaneCut(d, p, vec3(+0, 0, -1), -0.0); 
-    // float d = sdfOctahedron(p, 10.0);
-    // float d = sdfBox(p, vec3(5.0));
     float d = sdfSphere(p, 6.6);
 
-    d = sdfPlaneCut(d, p, vec3(0, +1, 0), -2.0);  // top cut
+    d = sdfPlaneCut(d, p, vec3(0, +1, 0), -2.0);
 
-    float angle = -45.;
+    const float angle = -45.;
 
     vec3 q = p;
     float h = -4.73;
@@ -122,11 +121,7 @@ float sdfCustomGem(vec3 p){
     return d;
 }
 
-float sdfMap(vec3 pos)
-{
-    pos.zx *= rot2D(u_time * 0.8);
-    pos.y += sin(u_time * 2.0);
-    return sdfCustomGem(pos);
+float sdfOctahedronGem(vec3 pos){
     vec3 p = pos;
     float offset = 3.5; 
 
@@ -140,6 +135,17 @@ float sdfMap(vec3 pos)
     float s3 = sdfOctahedron(p, 2.);
 
     return min(min(s1, s2),s3);
+}
+
+float sdfMap(vec3 pos)
+{
+    pos.zx *= rot2D(time * 0.2);
+
+#if GEM_TYPE == 0
+    return sdfOctahedronGem(pos);
+#else
+    return sdfCustomGem(pos);
+#endif
 }
 
 vec3 calculateNormal(vec3 pos)
@@ -162,8 +168,6 @@ float specular(vec3 rayDir, vec3 normal, vec3 lightDir, float po){
     return spec;
 }
 
-const int maxReflection = 3;
-
 vec3 raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 scatteredLight)
 {
     float m_dist = maxDist;
@@ -185,15 +189,14 @@ vec3 raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
         m_dist = sdfMap(pos);
 
         if (m_dist < 0.0){
-            // return calculateNormal(pos);
-            float density = 0.01 / refractionLoss;
+            float density = 0.1 / refractionLoss;
             vec3 Tr = exp(-SigmaE * density * abs(m_dist));
             transmittance *= Tr;
         }
 
         if (sign(prev_dist) != sign(m_dist)){ // ray went through surface if sign flip
             vec3 normal = calculateNormal(pos);
-            float dif = diffuse(normal, lightDir) * 0.1;
+            float dif = diffuse(normal, lightDir) * 0.05;
             if (prev_dist < 0.){ // if ray was inside the object, reflect
                 reflexion++;
                 if (reflexion > maxReflection)
@@ -202,7 +205,8 @@ vec3 raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
                 rayOrigin = prev_pos;
                 t = 0.;
                 SigmaE = getPalette(rayDir.x);
-                refractionLoss *= .2;
+                // SigmaE = getPalette(time * 0.05 + length(pos * 0.4));
+                refractionLoss *= rlCoef;
                 continue;
             }
             else if (first){
@@ -212,10 +216,8 @@ vec3 raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
 
                 rayOrigin = prev_pos;
                 t = 0.;
-                // float spec = specular(rayDir, normal, lightDir, 100.) * 10.0;
-                // scatteredLight += spec + dif;
             }
-            float spec = specular(rayDir, normal, lightDir, 32.) * 1.0;
+            float spec = specular(rayDir, normal, lightDir, 32.) * 0.5;
             scatteredLight += (spec + dif) * refractionLoss * transmittance;
         }
 
@@ -224,10 +226,8 @@ vec3 raymarch(vec3 rayOrigin, vec3 rayDir, inout vec3 transmittance, inout vec3 
 
         t += max(abs(m_dist), epsilon);
     }
-    // return vec4(pos, m_dist);
 
-    // scatteredLight += getGlow(1.0-dot(rayDir, lightDir), 0.00015, .5);
-    scatteredLight += getGlow(1.0-dot(originalRayDir, lightDir), 0.00015, .5);
+    scatteredLight += getGlow(1.0-dot(originalRayDir, lightDir), 0.00015, .5); // to see the sun through the gem
 
     return vec3(pos);
 }
@@ -236,7 +236,7 @@ void main(){
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y; // [-1; 1]
     vec2 mx = (u_mouse.xy * 2.0 - u_resolution.xy) / u_resolution.y;
 
-    vec3 rayOrigin = vec3(0, 0, -15.);
+    vec3 rayOrigin = vec3(0, 0, -cameraDist);
     vec3 rayDir = normalize(vec3(uv, 1.0));
 
     mx*=4.0;
@@ -250,10 +250,9 @@ void main(){
     vec3 transmittance = vec3(1.0);
     vec3 result = raymarch(rayOrigin, rayDir, transmittance, scatteredLight);
 
-    // gl_FragColor = vec4(result, 1.0);
-    // return;
+    // gl_FragColor = vec4(result, 1.0);return; // fun result
 
-    vec3 background = vec3(.5);
+    vec3 background = vec3(.05,0.0,.0);
     float mu = dot(rayDir, lightDir);
     background += getGlow(1.0-mu, 0.00015, .5);
 
